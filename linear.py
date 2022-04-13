@@ -1,7 +1,6 @@
 """
 Define, train, and evaluate a linear regression model
 """
-# pylint: disable=E0611
 import torch
 from torch import nn, tensor, optim, cat
 import matplotlib.pyplot as plt
