@@ -65,5 +65,6 @@ plt.plot(
     alpha=1.0
 )
 
+# Show plot with legend
 plt.legend()
 plt.show()

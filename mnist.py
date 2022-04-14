@@ -27,7 +27,9 @@ def fetch_dataset(file_name: str) -> np.array:
     return np.frombuffer(decompress(data), dtype=np.uint8).copy()
 
 
-x_train = fetch_dataset('train-images-idx3-ubyte.gz')
-y_train = fetch_dataset('train-labels-idx1-ubyte.gz')
-x_test = fetch_dataset('t10k-images-idx3-ubyte.gz')
-y_test = fetch_dataset('t10k-labels-idx1-ubyte.gz')
+x_train = fetch_dataset('train-images-idx3-ubyte.gz')[16:]
+y_train = fetch_dataset('train-labels-idx1-ubyte.gz')[8:]
+x_test = fetch_dataset('t10k-images-idx3-ubyte.gz')[16:]
+y_test = fetch_dataset('t10k-labels-idx1-ubyte.gz')[8:]
+
+print(x_train)
