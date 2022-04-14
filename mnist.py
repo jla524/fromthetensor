@@ -7,11 +7,13 @@ from gzip import decompress
 
 import requests
 import numpy as np
+import torch
 from torch import nn, tensor, flatten, optim
 
 # Parameters
-LR = 0.01
-EPOCHS = 1000
+BS = 64
+LR = 0.001
+EPOCHS = 5000
 
 # https://github.com/geohot/ai-notebooks/blob/master/mnist_from_scratch.ipynb
 def fetch_dataset(file_name: str) -> np.array:
@@ -44,8 +46,9 @@ class Net(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        #self.conv = nn.Conv2d(28, 28, (3, 3))
-        self.linear = nn.Linear(28 * 28, 10)
+        self.layer1 = nn.Linear(28 * 28, 128, bias=False)
+        self.layer2 = nn.Linear(128, 10, bias=False)
+        self.act = nn.LogSoftmax(dim=1)
 
     def forward(self, data: tensor) -> tensor:
         """
@@ -53,21 +56,23 @@ class Net(nn.Module):
         :param data: an image to pass in
         :return: a vector of probabilities
         """
-        data = data.view(-1, 28 * 28)
-        #data = self.conv(data)
-        #data = flatten(data)
-        data = self.linear(data)
+        data = self.layer1(data)
+        data = self.layer2(data)
+        data = self.act(data)
         return data
 
 net = Net()
-optimizer = optim.Adam(net.parameters(), lr=LR)
-criterion = nn.NLLLoss()
+criterion = nn.NLLLoss(reduction='none')
+optimizer = optim.SGD(net.parameters(), lr=LR)
 
 # Train the network
 for epoch in range(EPOCHS):
-    optimizer.zero_grad()
-    out = net.forward(tensor(x_train, dtype=float))
-    loss = criterion(out, y_train)
+    indices = np.random.randint(0, len(x_train), size=(BS))
+    x = tensor(x_train[indices].reshape((-1, 28 * 28))).float()
+    y = tensor(y_train[indices]).long()
+    net.zero_grad()
+    out = net.forward(x)
+    loss = criterion(out, y).mean()
     loss.backward()
     optimizer.step()
     print(f'epoch {epoch} loss {loss}')
