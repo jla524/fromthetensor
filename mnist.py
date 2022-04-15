@@ -8,11 +8,11 @@ from gzip import decompress
 import requests
 import numpy as np
 import torch
-from torch import nn, tensor, flatten, optim
+from torch import nn, tensor, optim
 
 # Parameters
 BS = 128
-LR = 0.0001
+LR = 0.0002
 EPOCHS = 10000
 
 # https://github.com/geohot/ai-notebooks/blob/master/mnist_from_scratch.ipynb
