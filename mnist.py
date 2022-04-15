@@ -46,8 +46,8 @@ class Net(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(28 * 28, 32, bias=False)
-        self.layer2 = nn.Linear(32, 10, bias=False)
+        self.layer1 = nn.Linear(28 * 28, 32)
+        self.layer2 = nn.Linear(32, 10)
         self.act = nn.LogSoftmax(dim=1)
 
     def forward(self, data: tensor) -> tensor:
@@ -71,7 +71,7 @@ for epoch in range(EPOCHS):
     x = tensor(x_train[indices].reshape((-1, 28 * 28))).float()
     y = tensor(y_train[indices]).long()
     net.zero_grad()
-    out = net.forward(x)
+    out = net(x)
     loss = criterion(out, y).mean()
     loss.backward()
     optimizer.step()
@@ -81,7 +81,6 @@ for epoch in range(EPOCHS):
 with torch.no_grad():
     x = tensor(x_test.reshape((-1, 28 * 28))).float()
     y = tensor(y_test)
-    out = net.forward(x)
-    pred = out.argmax(dim=1)
+    pred = net(x).argmax(dim=1)
     accuracy = (pred == y).float().mean()
     print(f'accuracy {accuracy}')
