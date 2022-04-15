@@ -12,8 +12,8 @@ from torch import nn, tensor, flatten, optim
 
 # Parameters
 BS = 64
-LR = 0.001
-EPOCHS = 5000
+LR = 0.0005
+EPOCHS = 15000
 
 # https://github.com/geohot/ai-notebooks/blob/master/mnist_from_scratch.ipynb
 def fetch_dataset(file_name: str) -> np.array:
@@ -46,8 +46,8 @@ class Net(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(28 * 28, 128, bias=False)
-        self.layer2 = nn.Linear(128, 10, bias=False)
+        self.layer1 = nn.Linear(28 * 28, 32, bias=False)
+        self.layer2 = nn.Linear(32, 10, bias=False)
         self.act = nn.LogSoftmax(dim=1)
 
     def forward(self, data: tensor) -> tensor:
@@ -62,8 +62,8 @@ class Net(nn.Module):
         return data
 
 net = Net()
-criterion = nn.NLLLoss(reduction='none')
-optimizer = optim.SGD(net.parameters(), lr=LR)
+criterion = nn.NLLLoss()
+optimizer = optim.Adam(net.parameters(), lr=LR)
 
 # Train the network
 for epoch in range(EPOCHS):
@@ -76,3 +76,12 @@ for epoch in range(EPOCHS):
     loss.backward()
     optimizer.step()
     print(f'epoch {epoch} loss {loss}')
+
+# Evaluation
+with torch.no_grad():
+    x = tensor(x_test.reshape((-1, 28 * 28))).float()
+    y = tensor(y_test)
+    out = net.forward(x)
+    pred = out.argmax(dim=1)
+    accuracy = (pred == y).float().mean()
+    print(f'accuracy {accuracy}')
