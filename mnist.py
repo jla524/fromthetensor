@@ -11,9 +11,9 @@ import torch
 from torch import nn, tensor, flatten, optim
 
 # Parameters
-BS = 64
-LR = 0.0005
-EPOCHS = 15000
+BS = 128
+LR = 0.0001
+EPOCHS = 10000
 
 # https://github.com/geohot/ai-notebooks/blob/master/mnist_from_scratch.ipynb
 def fetch_dataset(file_name: str) -> np.array:
