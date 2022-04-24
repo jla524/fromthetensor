@@ -1,7 +1,7 @@
 """
 Train a neural network to recognize handwritten digits
 """
-from hashlib import sha224
+from hashlib import sha1
 from pathlib import Path
 from gzip import decompress
 
@@ -21,7 +21,7 @@ def fetch_dataset(file_name: str) -> np.array:
     Load the given file from the MNIST database
     :file_name: a file in the MNIST database
     """
-    file_path = Path('/tmp') / sha224(file_name.encode('utf-8')).hexdigest()
+    file_path = Path('/tmp') / sha1(file_name.encode('utf-8')).hexdigest()
     if file_path.exists():
         with file_path.open('rb') as file:
             data = file.read()
