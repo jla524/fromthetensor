@@ -8,8 +8,9 @@ authors = ["Jacky Lee <jla524@sfu.ca>"]
 python = "^3.9"
 requests = "^2.27.1"
 numpy = "^1.22.3"
-gym = "^0.23.1"
 torch = "^1.11.0"
+ale-py = "^0.7.5"
+gym = {extras = ["accept-rom-license"], version = "^0.23.1"}
 
 [tool.poetry.dev-dependencies]
 
