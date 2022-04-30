@@ -5,13 +5,32 @@ import os
 
 import gym
 import numpy as np
+from torch import nn
 
 # Hyperparameters
 RENDER = os.getenv('RENDER') is not None
 RESUME = os.getenv('RESUME') is not None
 
 # Model initialization
+NUM_HIDDEN = 200
 DIMENSIONS = 80 * 80
+
+
+class PongNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layer1 = nn.Linear(NUM_HIDDEN, DIMENSIONS)
+        self.layer2 = nn.Linear(DIMENSIONS)
+        self.act1 = nn.ReLU()
+        self.act2 = nn.Sigmoid()
+
+    def forward(self, data):
+        data = self.layer1(data)
+        data = self.act1(data)
+        data = self.layer2(data)
+        data = self.act2(data)
+        return data
+
 
 # Game related
 if RENDER:
