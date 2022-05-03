@@ -8,6 +8,7 @@ import numpy as np
 from torch import nn, Tensor
 
 # Hyperparameters
+GAMMA = 0.99
 RENDER = os.getenv('RENDER') is not None
 RESUME = os.getenv('RESUME') is not None
 
@@ -46,9 +47,11 @@ else:
     env = gym.make('ALE/Pong-v5')
 
 
-def preprocess(image):
+def preprocess(image: np.ndarray) -> np.array:
     """
     Preprocess a 210x160x3 frame into a 6400 (80x80) float vector
+    :param image: a raw frame from pong
+    :return: a processed frame
     """
     image = image[35:195]  # crop
     image = image[::2, ::2, 0]  # downsample by a factor of 2
@@ -58,12 +61,30 @@ def preprocess(image):
     return image.astype(np.float64).ravel()
 
 
-def train():
+def discount_rewards(rewards: np.array) -> np.array:
+    """
+    Take 1D float array of rewards and compute discounted rewards
+    :param rewards: an array of rewards
+    :return: an array of discounted rewards
+    """
+    discounted = np.zeros_like(rewards)
+    running_add = 0
+    for i in reversed(range(rewards.size)):
+        if rewards[i] != 0:
+            running_add = 0  # reset the sum since this was a game boundary
+        running_add = running_add * GAMMA + rewards[i]
+        discounted[i] = running_add
+    return discounted
+
+
+def train() -> None:
     """
     Train the neural net to play pong
+    :return: None
     """
     observation = env.reset()
     previous = None
+    rewards = []
 
     while True:
         # Preprocess the observation
@@ -78,6 +99,18 @@ def train():
 
         # Step the environment
         observation, reward, done, info = env.step(action)
+
+        rewards.append(reward)
+
+        if done:
+            episode_reward = np.vstack(rewards)
+            rewards = []  # reset list memory
+
+            # compute and standardize the discounted reward
+            discounted_episode_reward = discount_rewards(episode_reward)
+            discounted_episode_reward -= np.mean(discounted_episode_reward)
+            discounted_episode_reward /= np.std(discounted_episode_reward)
+            print(discounted_episode_reward)
 
 
 if __name__ == '__main__':
