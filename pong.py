@@ -1,5 +1,5 @@
 """
-Train a model to play pong
+Train an agent to play pong with neural net
 """
 import os
 
@@ -10,8 +10,9 @@ from torch import optim, nn, Tensor
 from torch.autograd import Variable
 
 # Hyperparameters
-GAMMA = 0.99
 LR = 1e-4
+GAMMA = 0.99
+DISCOUNT_FACTOR = 0.99
 RENDER = os.getenv('RENDER') is not None
 RESUME = os.getenv('RESUME') is not None
 
@@ -88,62 +89,104 @@ def discount_rewards(rewards: np.array) -> np.array:
     return discounted
 
 
-def train() -> None:
+class PongAgent:
     """
-    Train the neural net to play pong
-    :return: None
+    An agent to play pong
     """
-    observation = env.reset()
-    previous = None
-    rewards, losses = [], []
-    running_reward = None
-    reward_sum = 0
-    episode_number = 0
+    def __init__(self):
+        self.observation = env.reset()
+        self.previous = None
+        self.rewards = []
+        self.losses = []
+        self.reward_sum = 0
+        self.running_reward = None
 
-    while True:
-        # Preprocess the observation
-        current = preprocess(observation)
-        frame = (current - previous if previous is not None
+    def _get_frame(self) -> np.array:
+        """
+        Compute the difference between the current and previous processed frame
+        :return: a frame to feed into the neural net
+        """
+        processed = preprocess(self.observation)
+        frame = (processed - self.previous
+                 if self.previous is not None
                  else np.zeros(DIMENSIONS))
-        previous = current
-        # Forward the policy network
-        prob = model.forward(Tensor(frame))
-        action = 2 if np.random.uniform() < prob else 3
-        # Record intermediates needed for backprop
-        label = 1 if action == 2 else 0
-        losses.append(label - prob.item())
-        # Step the environment
-        observation, reward, done, _ = env.step(action)
-        reward_sum += reward
-        rewards.append(reward)
+        self.previous = processed
+        return frame
 
-        if done:  # An episode finished
-            episode_number += 1
-            episode_loss = np.vstack(losses)
-            episode_reward = np.vstack(rewards)
-            # Compute and standardize the discounted reward
-            episode_reward = discount_rewards(episode_reward)
-            episode_reward -= np.mean(episode_reward)
-            episode_reward /= np.std(episode_reward)
-            # Backward pass
-            episode_loss *= episode_reward
-            loss = Variable(Tensor(episode_loss), requires_grad=True).mean()
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            # Book-keeping
-            running_reward = (reward_sum if running_reward is None
-                              else running_reward * 0.99 + reward_sum * 0.01)
-            print(f'episode reward total {reward_sum} '
-                  f'running reward {running_reward}')
-            if episode_number % 100 == 0:
-                torch.save(model, MODEL_PATH)
-            # Reset variables
-            observation = env.reset()
-            previous = None
-            rewards, losses = [], []
-            reward_sum = 0
+    def _get_episode_reward(self) -> np.ndarray:
+        """
+        Compute the standardized discounted reward
+        :return: an episode reward
+        """
+        result = np.vstack(self.rewards)
+        result = discount_rewards(result)
+        result -= np.mean(result)
+        result /= np.std(result)
+        return result
+
+    def _update_parameters(self) -> None:
+        """
+        Perform a backward pass and an optimzation step
+        """
+        episode_reward = self._get_episode_reward()
+        episode_loss = episode_reward * np.vstack(self.losses)
+        loss = Variable(Tensor(episode_loss), requires_grad=True).mean()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    def _print_rewards(self) -> None:
+        """
+        Compute and print the total and running reward
+        :return: None
+        """
+        if self.running_reward is None:
+            self.running_reward = self.reward_sum
+        else:
+            running = self.running_reward * DISCOUNT_FACTOR
+            current = self.reward_sum * (1 - DISCOUNT_FACTOR)
+            self.running_reward = running + current
+        print(f'episode reward total {self.reward_sum} '
+              f'running reward {self.running_reward}')
+
+    def reset_variables(self) -> None:
+        """
+        Reset variables
+        :return: None
+        """
+        self.observation = env.reset()
+        self.previous = None
+        self.rewards = []
+        self.losses = []
+        self.reward_sum = 0
+
+    def train(self) -> None:
+        """
+        Train the neural net to play pong
+        :return: None
+        """
+        episode_number = 0
+
+        while True:
+            frame = self._get_frame()
+            prob = model.forward(Tensor(frame))
+            action = 2 if np.random.uniform() < prob else 3
+            label = 1 if action == 2 else 0
+            self.losses.append(label - prob.item())
+
+            self.observation, reward, done, _ = env.step(action)
+            self.reward_sum += reward
+            self.rewards.append(reward)
+
+            if done:  # An episode finished
+                episode_number += 1
+                self._update_parameters()
+                self._print_rewards()
+                if episode_number % 100 == 0:
+                    torch.save(model, MODEL_PATH)
+                self.reset_variables()
 
 
 if __name__ == '__main__':
-    train()
+    agent = PongAgent()
+    agent.train()
