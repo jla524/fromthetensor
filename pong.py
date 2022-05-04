@@ -5,10 +5,12 @@ import os
 
 import gym
 import numpy as np
-from torch import nn, Tensor
+from torch import optim, nn, Tensor
+from torch.autograd import Variable
 
 # Hyperparameters
 GAMMA = 0.99
+LR = 1e-3
 RENDER = os.getenv('RENDER') is not None
 RESUME = os.getenv('RESUME') is not None
 
@@ -39,6 +41,7 @@ class PongNet(nn.Module):
         return data
 
 model = PongNet()
+optimizer = optim.Adam(model.parameters(), lr=LR)
 
 # Game related
 if RENDER:
@@ -84,7 +87,7 @@ def train() -> None:
     """
     observation = env.reset()
     previous = None
-    rewards = []
+    rewards, losses = [], []
 
     while True:
         # Preprocess the observation
@@ -97,20 +100,33 @@ def train() -> None:
         prob = model.forward(Tensor(frame))
         action = 2 if np.random.uniform() < prob else 3
 
+        # Record intermediates needed for backprop
+        label = 1 if action == 2 else 0
+        losses.append(label - prob.item())
+
         # Step the environment
-        observation, reward, done, info = env.step(action)
+        observation, reward, done, _ = env.step(action)
 
         rewards.append(reward)
 
         if done:
+            episode_loss = np.vstack(losses)
             episode_reward = np.vstack(rewards)
-            rewards = []  # reset list memory
+            rewards, losses = [], []  # reset list memory
 
             # compute and standardize the discounted reward
-            discounted_episode_reward = discount_rewards(episode_reward)
-            discounted_episode_reward -= np.mean(discounted_episode_reward)
-            discounted_episode_reward /= np.std(discounted_episode_reward)
-            print(discounted_episode_reward)
+            episode_reward = discount_rewards(episode_reward)
+            episode_reward -= np.mean(episode_reward)
+            episode_reward /= np.std(episode_reward)
+
+            episode_loss *= episode_reward
+            loss = Variable(Tensor(episode_loss), requires_grad=True).mean()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            observation = env.reset()
+            previous = None
 
 
 if __name__ == '__main__':
