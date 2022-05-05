@@ -51,7 +51,7 @@ class PongNet(nn.Module):
         return data
 
 if RESUME and os.path.isfile(SAVE_PATH):
-    model = torch.load(MODEL_PATH)
+    model = torch.load(SAVE_PATH)
 else:
     model = PongNet()
 optimizer = optim.Adam(model.parameters(), lr=LR)
