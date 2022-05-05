@@ -2,6 +2,7 @@
 Train an agent to play pong with neural net
 """
 import os
+from pathlib import Path
 
 import gym
 import numpy as np
@@ -17,9 +18,13 @@ RENDER = os.getenv('RENDER') is not None
 RESUME = os.getenv('RESUME') is not None
 
 # Model initialization
-NUM_HIDDEN = 200
 DIMENSIONS = 80 * 80
-MODEL_PATH = 'save.p'
+NUM_HIDDEN1 = 200
+NUM_HIDDEN2 = 10
+NUM_OUTPUT = 1
+BASE_PATH = Path(__file__).resolve().parent.parent
+MODEL_PATH = BASE_PATH / 'models'
+SAVE_PATH = MODEL_PATH / 'save.pt'
 
 
 class PongNet(nn.Module):
@@ -28,10 +33,11 @@ class PongNet(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(DIMENSIONS, NUM_HIDDEN)
-        self.layer2 = nn.Linear(NUM_HIDDEN, 1)
-        self.act1 = nn.ReLU()
-        self.act2 = nn.Sigmoid()
+        self.layer1 = nn.Linear(DIMENSIONS, NUM_HIDDEN1, bias=False)
+        self.layer2 = nn.Linear(NUM_HIDDEN1, NUM_HIDDEN2, bias=False)
+        self.layer3 = nn.Linear(NUM_HIDDEN2, NUM_OUTPUT, bias=False)
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, data: Tensor) -> Tensor:
         """
@@ -39,15 +45,13 @@ class PongNet(nn.Module):
         :param data: a frame in the pong game
         :return: a probability to move the paddle up
         """
-        data = self.layer1(data)
-        data = self.act1(data)
-        data = self.layer2(data)
-        data = self.act2(data)
+        data = self.relu(self.layer1(data))
+        data = self.relu(self.layer2(data))
+        data = self.sigmoid(self.layer3(data))
         return data
 
-if RESUME:
+if RESUME and os.path.isfile(SAVE_PATH):
     model = torch.load(MODEL_PATH)
-    model.eval()
 else:
     model = PongNet()
 optimizer = optim.Adam(model.parameters(), lr=LR)
@@ -165,7 +169,9 @@ class PongAgent:
         Train the neural net to play pong
         :return: None
         """
+        model.train()
         episode_number = 0
+        MODEL_PATH.mkdir(exist_ok=True)
 
         while True:
             frame = self._get_frame()
@@ -183,7 +189,7 @@ class PongAgent:
                 self._update_parameters()
                 self._print_rewards()
                 if episode_number % 100 == 0:
-                    torch.save(model, MODEL_PATH)
+                    torch.save(model, SAVE_PATH)
                 self.reset_variables()
 
 
