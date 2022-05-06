@@ -8,7 +8,6 @@ import gym
 import numpy as np
 import torch
 from torch import optim, nn, Tensor
-from torch.autograd import Variable
 
 # Hyperparameters
 LR = 1e-3
@@ -126,8 +125,8 @@ class PongAgent:
         """
         result = np.vstack(self.rewards)
         result = discount_rewards(result)
-        #result -= np.mean(result)
-        #result /= np.std(result)
+        result -= np.mean(result)
+        result /= np.std(result)
         return result
 
     def _update_parameters(self) -> None:
@@ -183,7 +182,7 @@ class PongAgent:
             action = 2 if np.random.uniform() < prob else 3
             label = 1 if action == 2 else 0
             self.probs.append(prob)
-            self.losses.append(label)
+            self.losses.append(label - prob.item())
 
             self.observation, reward, done, _ = env.step(action)
             self.reward_sum += reward
