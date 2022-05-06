@@ -12,6 +12,7 @@ from torch import optim, nn, Tensor
 # Hyperparameters
 LR = 1e-3
 GAMMA = 0.99
+BATCH_SIZE = 10
 DISCOUNT_FACTOR = 0.99
 RENDER = os.getenv('RENDER') is not None
 RESUME = os.getenv('RESUME') is not None
@@ -54,7 +55,7 @@ else:
     MODEL_PATH.mkdir(exist_ok=True)
     model = PongNet()
 optimizer = optim.Adam(model.parameters(), lr=LR)
-criterion = nn.SmoothL1Loss()
+criterion = nn.BCELoss(reduction='none')
 
 # Game related
 if RENDER:
@@ -102,9 +103,9 @@ class PongAgent:
         self.previous = None
         self.rewards = []
         self.probs = []
-        self.losses = []
-        self.reward_sum = 0
+        self.labels = []
         self.running_reward = None
+        self.episode_number = 0
 
     def _get_frame(self) -> np.array:
         """
@@ -132,28 +133,36 @@ class PongAgent:
     def _update_parameters(self) -> None:
         """
         Perform a backward pass and an optimzation step
+        :return: None
         """
+        predicted = torch.stack(self.probs).float().squeeze(1)
+        expected = torch.tensor(self.labels).float()
         episode_reward = self._get_episode_reward()
-        expected = episode_reward * np.vstack(self.losses)
-        predicted = torch.vstack(self.probs)
-        optimizer.zero_grad()
-        loss = criterion(predicted, Tensor(expected))
+        reward_tensor = torch.from_numpy(episode_reward).squeeze(1).float()
+
+        losses = criterion(predicted, expected) * reward_tensor
+        loss = torch.mean(losses)
         loss.backward()
-        optimizer.step()
+
+        if self.episode_number % BATCH_SIZE == 0:
+            optimizer.step()
+            optimizer.zero_grad()
 
     def _print_rewards(self) -> None:
         """
         Compute and print the total and running reward
         :return: None
         """
+        reward_sum = sum(self.rewards)
+
         if self.running_reward is None:
-            self.running_reward = self.reward_sum
+            self.running_reward = reward_sum
         else:
             running = self.running_reward * DISCOUNT_FACTOR
-            current = self.reward_sum * (1 - DISCOUNT_FACTOR)
+            current = reward_sum * (1 - DISCOUNT_FACTOR)
             self.running_reward = running + current
 
-        print(f'episode reward total {self.reward_sum} '
+        print(f'episode reward total {reward_sum} '
               f'running reward {self.running_reward}')
 
     def reset_variables(self) -> None:
@@ -165,34 +174,31 @@ class PongAgent:
         self.previous = None
         self.rewards = []
         self.probs = []
-        self.losses = []
-        self.reward_sum = 0
+        self.labels = []
 
     def train(self) -> None:
         """
         Train the neural net to play pong
         :return: None
         """
-        episode_number = 0
         model.train()
 
         while True:
             frame = self._get_frame()
             prob = model.forward(Tensor(frame))
-            action = 2 if np.random.uniform() < prob else 3
+            action = 2 if np.random.uniform() < prob.data[0] else 3
             label = 1 if action == 2 else 0
             self.probs.append(prob)
-            self.losses.append(label - prob.item())
+            self.labels.append(label)
 
             self.observation, reward, done, _ = env.step(action)
-            self.reward_sum += reward
             self.rewards.append(reward)
 
             if done:  # An episode finished
-                episode_number += 1
+                self.episode_number += 1
                 self._update_parameters()
                 self._print_rewards()
-                if episode_number % 100 == 0:
+                if self.episode_number % 100 == 0:
                     torch.save(model, SAVE_PATH)
                 self.reset_variables()
 
