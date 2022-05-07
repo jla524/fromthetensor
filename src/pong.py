@@ -19,7 +19,7 @@ RESUME = os.getenv('RESUME') is not None
 
 # Model initialization
 DIMENSIONS = 80 * 80
-NUM_HIDDEN = 300
+NUM_HIDDEN = 400
 NUM_OUTPUT = 1
 BASE_PATH = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_PATH / 'models'
@@ -135,7 +135,7 @@ class PongAgent:
         Perform a backward pass and an optimzation step
         :return: None
         """
-        predicted = torch.stack(self.probs).float().squeeze(1)
+        predicted = torch.cat(self.probs).float()
         expected = torch.tensor(self.labels).float()
         episode_reward = self._get_episode_reward()
         reward_tensor = torch.from_numpy(episode_reward).float().squeeze()
