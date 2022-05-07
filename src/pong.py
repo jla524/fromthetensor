@@ -49,6 +49,7 @@ class PongNet(nn.Module):
         data = self.sigmoid(data)
         return data
 
+
 if RESUME and os.path.isfile(SAVE_PATH):
     model = torch.load(SAVE_PATH)
 else:
