@@ -19,7 +19,7 @@ RESUME = os.getenv('RESUME') is not None
 
 # Model initialization
 DIMENSIONS = 80 * 80
-NUM_HIDDEN = 200
+NUM_HIDDEN = 300
 NUM_OUTPUT = 1
 BASE_PATH = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_PATH / 'models'
@@ -138,7 +138,7 @@ class PongAgent:
         predicted = torch.stack(self.probs).float().squeeze(1)
         expected = torch.tensor(self.labels).float()
         episode_reward = self._get_episode_reward()
-        reward_tensor = torch.from_numpy(episode_reward).squeeze(1).float()
+        reward_tensor = torch.from_numpy(episode_reward).float().squeeze()
 
         losses = criterion(predicted, expected) * reward_tensor
         loss = torch.mean(losses)
@@ -186,7 +186,7 @@ class PongAgent:
         while True:
             frame = self._get_frame()
             prob = model.forward(Tensor(frame))
-            action = 2 if np.random.uniform() < prob.data[0] else 3
+            action = 2 if np.random.uniform() < prob.item() else 3
             label = 1 if action == 2 else 0
             self.probs.append(prob)
             self.labels.append(label)
