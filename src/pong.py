@@ -19,7 +19,8 @@ RESUME = os.getenv('RESUME') is not None
 
 # Model initialization
 DIMENSIONS = 80 * 80
-NUM_HIDDEN = 400
+NUM_HIDDEN1 = 200
+NUM_HIDDEN2 = 10
 NUM_OUTPUT = 1
 BASE_PATH = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_PATH / 'models'
@@ -32,8 +33,9 @@ class PongNet(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.layer1 = nn.Linear(DIMENSIONS, NUM_HIDDEN, bias=False)
-        self.layer2 = nn.Linear(NUM_HIDDEN, NUM_OUTPUT, bias=False)
+        self.layer1 = nn.Linear(DIMENSIONS, NUM_HIDDEN1, bias=False)
+        self.layer2 = nn.Linear(NUM_HIDDEN1, NUM_HIDDEN2, bias=False)
+        self.layer3 = nn.Linear(NUM_HIDDEN2, NUM_OUTPUT, bias=False)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
@@ -43,10 +45,9 @@ class PongNet(nn.Module):
         :param data: a frame in the pong game
         :return: a probability to move the paddle up
         """
-        data = self.layer1(data)
-        data = self.relu(data)
-        data = self.layer2(data)
-        data = self.sigmoid(data)
+        data = self.relu(self.layer1(data))
+        data = self.relu(self.layer2(data))
+        data = self.sigmoid(self.layer3(data))
         return data
 
 
@@ -191,7 +192,6 @@ class PongAgent:
             label = 1 if action == 2 else 0
             self.probs.append(prob)
             self.labels.append(label)
-
             self.observation, reward, done, _ = env.step(action)
             self.rewards.append(reward)
 
