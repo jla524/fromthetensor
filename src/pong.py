@@ -20,7 +20,7 @@ RESUME = os.getenv('RESUME') is not None
 # Model initialization
 DIMENSIONS = 80 * 80
 NUM_HIDDEN1 = 200
-NUM_HIDDEN2 = 10
+NUM_HIDDEN2 = 20
 NUM_OUTPUT = 1
 BASE_PATH = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_PATH / 'models'
