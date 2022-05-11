@@ -16,11 +16,12 @@ BATCH_SIZE = 10
 DISCOUNT_FACTOR = 0.99
 RENDER = os.getenv('RENDER') is not None
 RESUME = os.getenv('RESUME') is not None
+EVAL = os.getenv('EVAL') is not None
 
 # Model initialization
 DIMENSIONS = 80 * 80
-NUM_HIDDEN1 = 200
-NUM_HIDDEN2 = 20
+NUM_HIDDEN1 = 50
+NUM_HIDDEN2 = 5
 NUM_OUTPUT = 1
 BASE_PATH = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_PATH / 'models'
@@ -51,7 +52,8 @@ class PongNet(nn.Module):
         return data
 
 
-if RESUME and os.path.isfile(SAVE_PATH):
+# Model related
+if (RESUME or EVAL) and os.path.isfile(SAVE_PATH):
     model = torch.load(SAVE_PATH)
 else:
     MODEL_PATH.mkdir(exist_ok=True)
@@ -60,10 +62,8 @@ optimizer = optim.Adam(model.parameters(), lr=LR)
 criterion = nn.BCELoss(reduction='none')
 
 # Game related
-if RENDER:
-    env = gym.make('ALE/Pong-v5', render_mode='human')
-else:
-    env = gym.make('ALE/Pong-v5')
+args = {'render_mode': 'human'} if RENDER else {}
+env = gym.make('ALE/Pong-v5', **args)
 
 
 def preprocess(image: np.ndarray) -> np.array:
@@ -72,7 +72,7 @@ def preprocess(image: np.ndarray) -> np.array:
     :param image: a raw frame from pong
     :return: a processed frame
     """
-    image = image[35:195]  # crop
+    image = image[35:195]  # crop the image
     image = image[::2, ::2, 0]  # downsample by a factor of 2
     image[image == 144] = 0  # erase background type 1
     image[image == 109] = 0  # erase background type 2
@@ -180,7 +180,7 @@ class PongAgent:
 
     def train(self) -> None:
         """
-        Train the neural net to play pong
+        Train the neural network to play pong
         :return: None
         """
         model.train()
@@ -188,7 +188,7 @@ class PongAgent:
         while True:
             frame = self._get_frame()
             prob = model.forward(Tensor(frame))
-            action = 2 if np.random.uniform() < prob.item() else 3
+            action = 2 if prob.item() > np.random.uniform() else 3
             label = 1 if action == 2 else 0
             self.probs.append(prob)
             self.labels.append(label)
@@ -203,7 +203,28 @@ class PongAgent:
                     torch.save(model, SAVE_PATH)
                 self.reset_variables()
 
+    def eval(self) -> None:
+        """
+        Evaluate the neural network
+        :return: None
+        """
+        model.eval()
+
+        while True:
+            frame = self._get_frame()
+            prob = model.forward(Tensor(frame))
+            action = 2 if prob.item() > 0.5 else 3
+            self.observation, reward, done, _ = env.step(action)
+            self.rewards.append(reward)
+
+            if done:
+                self._print_rewards()
+                self.reset_variables()
+
 
 if __name__ == '__main__':
     agent = PongAgent()
-    agent.train()
+    if EVAL:
+        agent.eval()
+    else:
+        agent.train()
