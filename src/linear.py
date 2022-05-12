@@ -23,6 +23,7 @@ class Net(nn.Module):
     """
     A network for linear regression
     """
+
     def __init__(self):
         super().__init__()
         self.linear = nn.Linear(1, 1)
@@ -33,6 +34,7 @@ class Net(nn.Module):
         """
         data = self.linear(data)
         return data
+
 
 net = Net()
 
@@ -62,7 +64,7 @@ plt.plot(
     cat([train_output, test_output]),
     '--',
     label='predicted',
-    alpha=1.0
+    alpha=1.0,
 )
 
 # Show plot with legend

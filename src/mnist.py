@@ -44,6 +44,7 @@ class Net(nn.Module):
     """
     A neural network to recognize handwritten digits
     """
+
     def __init__(self):
         super().__init__()
         self.layer1 = nn.Linear(28 * 28, 32)
@@ -60,6 +61,7 @@ class Net(nn.Module):
         data = self.layer2(data)
         data = self.act(data)
         return data
+
 
 net = Net()
 criterion = nn.NLLLoss()
