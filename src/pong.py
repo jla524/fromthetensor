@@ -20,7 +20,7 @@ EVAL = os.getenv('EVAL') is not None
 
 # Model initialization
 DIMENSIONS = 80 * 80
-NUM_HIDDEN1 = 50
+NUM_HIDDEN1 = 25
 NUM_HIDDEN2 = 5
 NUM_OUTPUT = 1
 BASE_PATH = Path(__file__).resolve().parent.parent
@@ -32,6 +32,7 @@ class PongNet(nn.Module):
     """
     A neural net to play pong
     """
+
     def __init__(self):
         super().__init__()
         self.layer1 = nn.Linear(DIMENSIONS, NUM_HIDDEN1, bias=False)
@@ -100,6 +101,7 @@ class PongAgent:
     """
     An agent to play pong
     """
+
     def __init__(self):
         self.observation = env.reset()
         self.previous = None
@@ -115,9 +117,11 @@ class PongAgent:
         :return: a frame to feed into the neural net
         """
         processed = preprocess(self.observation)
-        frame = (processed - self.previous
-                 if self.previous is not None
-                 else np.zeros(DIMENSIONS))
+        frame = (
+            processed - self.previous
+            if self.previous is not None
+            else np.zeros(DIMENSIONS)
+        )
         self.previous = processed
         return frame
 
@@ -164,8 +168,10 @@ class PongAgent:
             current = reward_sum * (1 - DISCOUNT_FACTOR)
             self.running_reward = running + current
 
-        print(f'episode reward total {reward_sum} '
-              f'running reward {self.running_reward}')
+        print(
+            f'episode reward total {reward_sum} '
+            f'running reward {self.running_reward}'
+        )
 
     def reset_variables(self) -> None:
         """
