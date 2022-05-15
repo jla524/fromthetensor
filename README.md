@@ -17,7 +17,8 @@ from a database. Fine tune parameters and neurons.
 
 #### Section 3: Reinforcement: What is RL anyway? -- 2 weeks
 
-- Coding a pong agent -- Fun and interesting, lots of training. Teaches you Q
+- Coding a pong agent -- Fun and interesting, lots of training. Teaches you 
+Q-learning. Initially agent loses all games, but starts winning after hours of
 learning.
 
 
