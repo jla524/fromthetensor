@@ -9,7 +9,7 @@ it's hard to understand [software 2.0][1] from first principles.
 > 2. Implement it
 > 3. Keep doing this until you have skills
 >
-> -- <cite>[George Hotz][2]</cite>
+> -- *[George Hotz][2]*
 
 [1]: https://karpathy.medium.com/software-2-0-a64152b37c35
 [2]: https://youtu.be/N2bXEUSAiTI?t=1315
