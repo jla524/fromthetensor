@@ -23,23 +23,23 @@ Building a simple Neural Network(Python, 10) -- Your first little program! Getti
 
 Building a simple CNN(Python, 100) -- An intro chapter to deep learning, learn how to build a simple CNN and understand the concepts of convolution and pooling.
 
-## Section 3: Deep Learning: What is deep learning anyway? -- 3 weeks
+## Section 3: Deep Learning: What is deep learning anyway? -- 2 weeks
 
 Building a simple RNN(Python, 500) -- Learn the basics of Recurrent Neural Networks, understand the concepts of LSTM and GRU cells.
 
-Building a GAN(Python, 1500) -- Learn how to build a simple Generative Adversarial Network, understand the concept of adversarial training.
+Building a GAN(Python, 500) -- Learn how to build a simple Generative Adversarial Network, understand the concept of adversarial training.
 
 ## Section 4: Advanced Deep Learning: A “high” level deep learning -- 4 weeks
 
-Building a Transformer(Python, 2000) -- Learn about the transformer architecture and its application in NLP tasks.
+Building a Transformer(Python, 1000) -- Learn about the transformer architecture and its application in NLP tasks.
 
-Building a BERT(Python, 3000) -- Learn about the BERT architecture and its application in NLP tasks.
+Building a Stable Diffusion model(Python, 3000) -- Learn about the Stable Diffusion architecture and its application in image generation tasks.
 
 ## Section 5: Deployment: Putting deep learning models into production -- 3 weeks
 
-Building a REST API(Python, 1000) -- Learn how to deploy a deep learning model as a REST API, understand the concepts of API design and scaling.
+Building a REST API(Python, 500) -- Learn how to deploy a deep learning model as a REST API, understand the concepts of API design and scaling.
 
-Building a Kubernetes cluster(YAML, 2000) -- Learn how to deploy a deep learning model on a Kubernetes cluster, understand the concepts of containerization and cluster management.
+Building a Kubernetes cluster(YAML, 1000) -- Learn how to deploy a deep learning model on a Kubernetes cluster, understand the concepts of containerization and cluster management.
 
 ## Section 6: Explainability: Understanding deep learning models -- 1 week
 
