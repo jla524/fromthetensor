@@ -49,7 +49,7 @@ Interpreting deep learning models(Python, 500) -- Learn how to interpret and und
 
 Building a LIME(Python, 500) -- Learn how to build a Local Interpretable Model-Agnostic Explanations (LIME) for deep learning models, understand the concepts of model explanation.
 
-## Section 7: Distributed deep learning: Scaling deep learning models -- 1 week
+## Section 7: Distributed Deep Learning: Scaling deep learning models -- 1 week
 
 Building a PyTorch cluster(Python, 1000) -- Learn how to scale deep learning models using PyTorch, understand the concepts of distributed training and data parallelism.
 
