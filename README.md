@@ -1,5 +1,7 @@
 # From the Tensor to Stable Diffusion
 
+Inspired by [From the Transistor][0].
+
 Machine learning is hard, a lot of tutorials are hard to follow, and
 it's hard to understand [software 2.0][1] from first principles.
 
@@ -51,5 +53,6 @@ Building a LIME(Python, 500) -- Learn how to build a Local Interpretable Model-A
 
 Building a PyTorch cluster(Python, 1000) -- Learn how to scale deep learning models using PyTorch, understand the concepts of distributed training and data parallelism.
 
+[0]: https://github.com/geohot/fromthetransistor
 [1]: https://karpathy.medium.com/software-2-0-a64152b37c35
 [2]: https://youtu.be/N2bXEUSAiTI?t=1315
