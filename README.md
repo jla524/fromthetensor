@@ -21,9 +21,13 @@ Accelerated learning -- Training on a personal computer limits the reach of this
 
 ## Section 2: Bringup: What language is deep learning coded in? -- 0.5 weeks
 
-Building a simple Neural Network(Python, 10) -- Your first little program! Getting the simulator working. Learning the basics of deep learning.
+Building a simple Neural Network -- Your first little program! Getting the simulator working. Learning the basics of deep learning.
 
-Building a simple CNN(Python, 100) -- An intro chapter to deep learning, learn how to build a simple CNN and understand the concepts of convolution and pooling.
+Building a simple CNN -- An intro chapter to deep learning, learn how to build a simple CNN and understand the concepts of convolution and pooling.
+
+## Section 3: Deep Learning: What is deep learning anyway? -- 2 weeks
+
+Building a simple RNN -- Learn the basics of Recurrent Neural Networks, understand the concepts of LSTM and GRU cells.
 
 [0]: https://github.com/geohot/fromthetransistor
 [1]: https://karpathy.medium.com/software-2-0-a64152b37c35
