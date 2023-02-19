@@ -41,3 +41,4 @@ Building a GAN -- Learn how to build a simple Generative Adversarial Network, un
 [3]: https://github.com/jla524/fromthetensor/blob/main/examples/mnist_from_scratch.ipynb
 [4]: https://github.com/jla524/fromthetensor/blob/main/examples/mnist_cnn.ipynb
 [5]: https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb
+[6]: https://github.com/jla524/fromthetensor/blob/main/examples/mnist_gan.ipynb
