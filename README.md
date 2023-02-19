@@ -5,7 +5,7 @@ Inspired by [From the Transistor][0].
 Machine learning is hard, a lot of tutorials are hard to follow, and
 it's hard to understand [software 2.0][1] from first principles.
 
-> You wanna be an ML engineer? There's the steps to get good at that.
+> You wanna be an ML engineer? There's the steps to get good at that:
 >
 > 1. Download a paper
 > 2. Implement it
@@ -28,6 +28,8 @@ Building a simple CNN -- An intro chapter to deep learning, learn how to build a
 ## Section 3: Deep Learning: What is deep learning anyway? -- 2 weeks
 
 Building a simple RNN -- Learn the basics of Recurrent Neural Networks, understand the concepts of LSTM and GRU cells.
+
+Building a GAN -- Learn how to build a simple Generative Adversarial Network, understand the concept of adversarial training.
 
 [0]: https://github.com/geohot/fromthetransistor
 [1]: https://karpathy.medium.com/software-2-0-a64152b37c35
