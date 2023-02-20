@@ -16,29 +16,39 @@ it's hard to understand [software 2.0][1] from first principles.
 ## Section 1: Intro: Cheating our way past the Tensor -- 0.5 weeks
 
 So about those Tensors -- Course overview. Describe how Deep Learning models are buildable using Tensors and how different architectures like CNNs and RNNs use Tensors in different ways. Understand the concept of backpropagation and gradient descent.
+[[video](https://www.youtube.com/watch?v=aircAruvnKk)]
 
-Accelerated learning -- Training on a personal computer limits the reach of this course. Using something like Google Colab will allow anyone with a computer to play.
+Accelerated learning -- Training on a personal computer limits the reach of this course. Using something like [Google Colab][3] will allow anyone with a computer to play.
 
 ## Section 2: Bringup: What language is deep learning coded in? -- 0.5 weeks
 
 Building a simple Neural Network -- Your first little program! Getting the model working. Learning the basics of deep learning.
-[[code][3]]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_from_scratch.ipynb)]
+[[video](https://www.youtube.com/watch?v=Xtws3-Pk69o)]
 
 Building a simple CNN -- An intro chapter to deep learning, learn how to build a simple CNN and understand the concepts of convolution and pooling.
-[[code][4]]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_cnn.ipynb)]
+[[paper](https://arxiv.org/abs/1511.08458)]
 
 ## Section 3: Deep Learning: What is deep learning anyway? -- 2 weeks
 
 Building a simple RNN -- Learn the basics of Recurrent Neural Networks, understand the concepts of LSTM and GRU cells.
-[[code][5]]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb)]
+[[paper](https://arxiv.org/abs/1808.03314)]
 
 Building a GAN -- Learn how to build a simple Generative Adversarial Network, understand the concept of adversarial training.
-[[code][6]]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_gan.ipynb)]
+[[paper](https://arxiv.org/abs/1406.2661)]
+
+## Section 4: Advanced Deep Learning: A “high” level deep learning -- 4 weeks
+
+Building a Transformer -- Learn about the transformer architecture and its application in NLP tasks.
+[[paper](https://arxiv.org/abs/1706.03762)]
+
+Building a Stable Diffusion model -- Learn about the Stable Diffusion architecture and its application in image generation tasks.
+[[paper](https://arxiv.org/pdf/2112.10752.pdf)]
 
 [0]: https://github.com/geohot/fromthetransistor
 [1]: https://karpathy.medium.com/software-2-0-a64152b37c35
 [2]: https://youtu.be/N2bXEUSAiTI?t=1315
-[3]: https://github.com/jla524/fromthetensor/blob/main/examples/mnist_from_scratch.ipynb
-[4]: https://github.com/jla524/fromthetensor/blob/main/examples/mnist_cnn.ipynb
-[5]: https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb
-[6]: https://github.com/jla524/fromthetensor/blob/main/examples/mnist_gan.ipynb
+[3]: https://colab.research.google.com
