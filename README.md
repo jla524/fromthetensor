@@ -20,7 +20,7 @@ So about those Tensors -- Course overview. Describe how Deep Learning models are
 
 Accelerated learning -- Training on a personal computer limits the reach of this course. Using something like [Google Colab][3] will allow anyone with a computer to play.
 
-## Section 2: Bringup: What language is deep learning coded in? -- 0.5 weeks
+## Section 2: Deep Learning: What is deep learning anyway? -- 0.5 weeks
 
 Building a simple Neural Network -- Your first little program! Getting the model working. Learning the basics of deep learning.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_from_scratch.ipynb)]
@@ -30,11 +30,11 @@ Building a simple CNN -- An intro chapter to deep learning, learn how to build a
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_cnn.ipynb)]
 [[paper](https://arxiv.org/abs/1511.08458)]
 
-## Section 3: Deep Learning: What is deep learning anyway? -- 2 weeks
+## Section 3: Implementing Papers: A short view back to the past -- 2 weeks
 
 Building a simple RNN -- Learn the basics of Recurrent Neural Networks, understand the concepts of LSTM and GRU cells.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb)]
-[[paper](https://arxiv.org/abs/1808.03314)]
+[[reference](https://jaketae.github.io/study/pytorch-rnn/)]
 
 Building a GAN -- Learn how to build a simple Generative Adversarial Network, understand the concept of adversarial training.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_gan.ipynb)]
