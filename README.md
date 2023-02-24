@@ -30,7 +30,7 @@ Building a simple CNN -- An intro chapter to deep learning, learn how to build a
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_cnn.ipynb)]
 [[paper](https://arxiv.org/abs/1511.08458)]
 
-## Section 3: Implementing Papers: A short view back to the past -- 2 weeks
+## Section 3: Implementing Papers (Part 1): A short view back to the past -- 2 weeks
 
 Building a simple RNN -- Learn the basics of Recurrent Neural Networks, understand the concepts of LSTM and GRU cells.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb)]
@@ -40,7 +40,13 @@ Building a GAN -- Learn how to build a simple Generative Adversarial Network, un
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_gan.ipynb)]
 [[paper](https://arxiv.org/abs/1406.2661)]
 
-## Section 4: Advanced Deep Learning: A “high” level deep learning -- 4 weeks
+## Section 4: Implementing Papers (Part 2): Back to the future -- 2 weeks
+
+Implementing ResNet -- Learn how to implement the ResNet architecture for image classification tasks.
+
+[[reference](https://blog.paperspace.com/writing-resnet-from-scratch-in-pytorch/)]
+
+## Section 5: Advanced Deep Learning: A “high” level deep learning -- 4 weeks
 
 Building a Transformer -- Learn about the transformer architecture and its application in NLP tasks.
 [[paper](https://arxiv.org/abs/1706.03762)]
