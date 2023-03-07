@@ -43,8 +43,8 @@ Building a GAN -- Learn how to build a simple Generative Adversarial Network, un
 ## Section 4: Implementing Papers (Part 2): Back to the future -- 2 weeks
 
 Implementing ResNet -- Learn how to implement the ResNet architecture for image classification tasks.
-
-[[reference](https://blog.paperspace.com/writing-resnet-from-scratch-in-pytorch/)]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_resnet.ipynb)]
+[[paper](https://arxiv.org/abs/1512.03385)]
 
 ## Section 5: Advanced Deep Learning: A “high” level deep learning -- 4 weeks
 
