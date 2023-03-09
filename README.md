@@ -36,8 +36,8 @@ Building a simple RNN -- Learn the basics of Recurrent Neural Networks, understa
 
 ## Section 3: Implementing Papers (Part 1): A short view back to the past -- 3 weeks
 
-Implementing LeNet -- Learn how to implement the LeNet-5 architecture for image classification tasks.
-[[code](https://github.com/jla524/fromthetensor/)]
+Implementing LeNet-5 -- Learn how to implement the LeNet-5 architecture for image classification tasks.
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_lenet.ipynb)]
 [[paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
 Building a GAN -- Learn how to build a simple Generative Adversarial Network, understand the concept of adversarial training.
