@@ -28,13 +28,17 @@ Building a simple Neural Network -- Your first little program! Getting the model
 
 Building a simple CNN -- An intro chapter to deep learning, learn how to build a simple CNN and understand the concepts of convolution and pooling.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_cnn.ipynb)]
-[[paper](https://arxiv.org/abs/1511.08458)]
+[[video](https://www.youtube.com/watch?v=KuXjwB4LzSA)]
 
 Building a simple RNN -- Learn the basics of Recurrent Neural Networks, understand the concepts of LSTM and GRU cells.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb)]
-[[reference](https://jaketae.github.io/study/pytorch-rnn/)]
+[[video](https://www.youtube.com/watch?v=WCUNPb-5EYI)]
 
 ## Section 3: Implementing Papers (Part 1): A short view back to the past -- 3 weeks
+
+Implementing LeNet -- Learn how to implement the LeNet-5 architecture for image classification tasks.
+[[code](https://github.com/jla524/fromthetensor/)]
+[[paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
 Building a GAN -- Learn how to build a simple Generative Adversarial Network, understand the concept of adversarial training.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_gan.ipynb)]
