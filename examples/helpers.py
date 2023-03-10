@@ -22,9 +22,11 @@ def train(model, X_train, Y_train, optim, steps, BS=128, lossfn=F.cross_entropy,
         t.set_description(f"loss {loss:.2f} accuracy {accuracy:.2f}")
 
 
-def evaluate(model, X_test, Y_test, transform=lambda x: x):
+def evaluate(model, X_test, Y_test, num_classes=10, BS=128, transform=lambda x: x):
     model.eval()
-    out = model(torch.tensor(transform(X_test)))
-    preds = torch.argmax(out, dim=1).numpy()
+    preds = np.zeros(Y_test.shape)
+    for i in trange((len(Y_test)-1)//BS+1):
+        out = model(torch.tensor(transform(X_test[i*BS:(i+1)*BS])))
+        preds[i*BS:(i+1)*BS] = torch.argmax(out, dim=1).detach().numpy()
     accuracy = (Y_test == preds).mean()
     print(f"test set accuracy is {accuracy}")
