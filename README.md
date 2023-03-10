@@ -20,7 +20,7 @@ So about those Tensors -- Course overview. Describe how Deep Learning models are
 
 Accelerated learning -- Training on a personal computer limits the reach of this course. Using something like [Google Colab][3] will allow anyone with a computer to play.
 
-## Section 2: Deep Learning: What is deep learning anyway? -- 2 weeks
+## Section 2: Deep Learning: What is deep learning anyway? -- 1 weeks
 
 Building a simple Neural Network -- Your first little program! Getting the model working. Learning the basics of deep learning.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_from_scratch.ipynb)]
@@ -34,24 +34,29 @@ Building a simple RNN -- Learn the basics of Recurrent Neural Networks, understa
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb)]
 [[video](https://www.youtube.com/watch?v=WCUNPb-5EYI)]
 
-## Section 3: Implementing Papers (Part 1): A short view back to the past -- 3 weeks
+## Section 3: Implementing Papers (Part 1): Vision models -- 3 weeks
 
-Implementing LeNet-5 -- Learn how to implement the LeNet-5 architecture for image classification tasks.
+Implementing LeNet-5 (1998) -- Learn about the LeNet architecture and its application.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_lenet.ipynb)]
 [[paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
-Building a GAN -- Learn how to build a simple Generative Adversarial Network, understand the concept of adversarial training.
-[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_gan.ipynb)]
-[[paper](https://arxiv.org/abs/1406.2661)]
+Implementing AlexNet (2012) -- Learn how to implement AlexNet for image classification tasks.
+[[paper](https://papers.nips.cc/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html)]
 
-Implementing ResNet -- Learn how to implement the ResNet architecture for image classification tasks.
+Implementing ResNet (2015) -- Learn how to implement ResNet for image classification tasks.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_resnet.ipynb)]
 [[paper](https://arxiv.org/abs/1512.03385)]
 
-## Section 4: Implementing Papers (Part 2): Building SOTA models -- 5 weeks
+Building a DCGAN (2016) -- Learn how to build a DCGAN and the concept of adversarial training.
+[[GAN paper](https://arxiv.org/abs/1406.2661)]
+[[DCGAN paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
-Building a Transformer -- Learn about the transformer architecture and its application in NLP tasks.
+## Section 4: Implementing Papers (Part 2): Language models -- 2 weeks
+
+Building a Transformer -- Learn about the transformer architecture and its application.
 [[paper](https://arxiv.org/abs/1706.03762)]
+
+## Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
 
 Building a Stable Diffusion model -- Learn about the Stable Diffusion architecture and its application in image generation tasks.
 [[paper](https://arxiv.org/pdf/2112.10752.pdf)]
