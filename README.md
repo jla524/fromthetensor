@@ -1,4 +1,4 @@
-# From the Tensor to Stable Diffusion
+## From the Tensor to Stable Diffusion
 
 Inspired by [From the Transistor][0].
 
@@ -13,14 +13,14 @@ it's hard to understand [software 2.0][1] from first principles.
 >
 > -- *[George Hotz][2]*
 
-## Section 1: Intro: Cheating our way past the Tensor -- 0.5 weeks
+#### Section 1: Intro: Cheating our way past the Tensor -- 0.5 weeks
 
 - So about those Tensors -- Course overview. Describe how Deep Learning models are buildable using Tensors and how different architectures like CNNs and RNNs use Tensors in different ways. Understand the concept of backpropagation and gradient descent.
 [[video](https://www.youtube.com/watch?v=aircAruvnKk)]
 
 - Accelerated learning -- Training on a personal computer limits the reach of this course. Using something like [Google Colab][3] will allow anyone with a computer to play.
 
-## Section 2: Deep Learning: What is deep learning anyway? -- 0.5 weeks
+#### Section 2: Deep Learning: What is deep learning anyway? -- 0.5 weeks
 
 - Building a simple Neural Network -- Your first little program! Getting the model working. Learning the basics of deep learning.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_from_scratch.ipynb)]
@@ -34,7 +34,7 @@ it's hard to understand [software 2.0][1] from first principles.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb)]
 [[video](https://www.youtube.com/watch?v=WCUNPb-5EYI)]
 
-## Section 3: Implementing Papers (Part 1): Vision models -- 3 weeks
+#### Section 3: Implementing Papers (Part 1): Vision models -- 3 weeks
 
 - Implementing LeNet-5 (1998) -- Learn about the LeNet architecture and its application.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_lenet.ipynb)]
@@ -51,12 +51,12 @@ it's hard to understand [software 2.0][1] from first principles.
 [[GAN paper](https://arxiv.org/abs/1406.2661)]
 [[DCGAN paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
-## Section 4: Implementing Papers (Part 2): Language models -- 2 weeks
+#### Section 4: Implementing Papers (Part 2): Language models -- 2 weeks
 
 - Building a Transformer -- Learn about the transformer architecture and its application.
 [[paper](https://arxiv.org/abs/1706.03762)]
 
-## Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
+#### Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
 
 - Building a Stable Diffusion model -- Learn about the Stable Diffusion architecture and its application in image generation tasks.
 [[paper](https://arxiv.org/pdf/2112.10752.pdf)]
