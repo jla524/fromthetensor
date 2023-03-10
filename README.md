@@ -53,13 +53,13 @@ it's hard to understand [software 2.0][1] from first principles.
 
 #### Section 4: Implementing Papers (Part 2): Language models -- 2 weeks
 
-- Building a Transformer -- Learn about the transformer architecture and its application.
+- Building a Transformer (2017) -- Learn about the transformer architecture and its application.
 [[paper](https://arxiv.org/abs/1706.03762)]
 
 #### Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
 
 - Building a Stable Diffusion model -- Learn about the Stable Diffusion architecture and its application in image generation tasks.
-[[paper](https://arxiv.org/pdf/2112.10752.pdf)]
+[[paper](https://arxiv.org/abs/2112.10752)]
 
 [0]: https://github.com/geohot/fromthetransistor
 [1]: https://karpathy.medium.com/software-2-0-a64152b37c35
