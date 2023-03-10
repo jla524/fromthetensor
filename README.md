@@ -18,7 +18,7 @@ it's hard to understand [software 2.0][1] from first principles.
 - So about those Tensors -- Course overview. Describe how Deep Learning models are buildable using Tensors and how different architectures like CNNs and RNNs use Tensors in different ways. Understand the concept of backpropagation and gradient descent.
 [[video](https://www.youtube.com/watch?v=aircAruvnKk)]
 
-- Accelerated learning -- Training on a personal computer limits the reach of this course. Using something like [Google Colab][3] will allow anyone with a computer to play.
+- Accelerated learning -- Training on a personal computer may limit the reach of this course. Using something like [Google Colab][3] will allow anyone with a computer to play.
 
 #### Section 2: Deep Learning: What is deep learning anyway? -- 0.5 weeks
 
@@ -41,6 +41,7 @@ it's hard to understand [software 2.0][1] from first principles.
 [[paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
 - Implementing AlexNet (2012) -- Learn how to implement AlexNet for image classification tasks.
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/cifar_alexnet.ipynb)]
 [[paper](https://papers.nips.cc/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html)]
 
 - Implementing ResNet (2015) -- Learn how to implement ResNet for image classification tasks.
