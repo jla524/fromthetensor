@@ -49,6 +49,7 @@ it's hard to understand [software 2.0][1] from first principles.
 [[paper](https://arxiv.org/abs/1512.03385)]
 
 - Building a DCGAN (2016) -- Learn how to build a DCGAN and the concept of adversarial training.
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_dcgan.ipynb)]
 [[GAN paper](https://arxiv.org/abs/1406.2661)]
 [[DCGAN paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
