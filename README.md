@@ -22,7 +22,7 @@ it's hard to understand [software 2.0][1] from first principles.
 
 #### Section 2: Deep Learning: What is deep learning anyway? -- 0.5 weeks
 
-- Building a simple Neural Network -- Your first little program! Getting the model working. Learning the basics of deep learning.
+- Building a simple Neural Network -- Your first little program! Getting the model working and learning the basics of deep learning.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_from_scratch.ipynb)]
 [[video](https://www.youtube.com/watch?v=Xtws3-Pk69o)]
 
@@ -30,30 +30,34 @@ it's hard to understand [software 2.0][1] from first principles.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_cnn.ipynb)]
 [[video](https://www.youtube.com/watch?v=KuXjwB4LzSA)]
 
-- Building a simple RNN -- Learn the basics of Recurrent Neural Networks, understand the concepts of LSTM and GRU cells.
+- Building a simple RNN -- Learn the basics of Recurrent Neural Networks and understand the concept of "memory" that helps them store states of previous inputs.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb)]
 [[video](https://www.youtube.com/watch?v=WCUNPb-5EYI)]
 
 #### Section 3: Implementing Papers (Part 1): Vision models -- 3 weeks
 
-- Implementing LeNet-5 (1998) -- Learn about the LeNet architecture and its application.
+- Implementing LeNet-5 -- Learn about the LeNet architecture and its application.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_lenet.ipynb)]
 [[paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
-- Implementing AlexNet (2012) -- Learn how to implement AlexNet for image classification tasks.
+- Implementing AlexNet -- Learn how to implement AlexNet for image classification tasks.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/cifar_alexnet.ipynb)]
 [[paper](https://papers.nips.cc/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html)]
 
-- Implementing ResNet (2015) -- Learn how to implement ResNet for image classification tasks.
+- Implementing ResNet -- Learn how to implement ResNet for image classification tasks.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_resnet.ipynb)]
 [[paper](https://arxiv.org/abs/1512.03385)]
 
-- Building a DCGAN (2016) -- Learn how to build a DCGAN and the concept of adversarial training.
+- Building a DCGAN -- Learn how to build a DCGAN and the concept of adversarial training.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_dcgan.ipynb)]
 [[GAN paper](https://arxiv.org/abs/1406.2661)]
 [[DCGAN paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
 #### Section 4: Implementing Papers (Part 2): Language models -- 2 weeks
+
+- Implementing GRU and LSTM -- Learn about the concepts of LSTM and GRU cells.
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_gru_lstm.ipynb)]
+[[paper](https://arxiv.org/abs/1412.3555)]
 
 - Building a Transformer (2017) -- Learn about the transformer architecture and its application.
 [[paper](https://arxiv.org/abs/1706.03762)]
