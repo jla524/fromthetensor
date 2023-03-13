@@ -16,7 +16,7 @@ it's hard to understand [software 2.0][1] from first principles.
 #### Section 1: Intro: Cheating our way past the Tensor -- 0.5 weeks
 
 - So about those Tensors -- Course overview. Describe how Deep Learning models are buildable using Tensors and how different architectures like CNNs and RNNs use Tensors in different ways. Understand the concept of backpropagation and gradient descent.
-[[video](https://www.youtube.com/watch?v=aircAruvnKk)]
+[[video](https://www.youtube.com/watch?v=VMj-3S1tku0)]
 
 - Accelerated learning -- Training on a personal computer may limit the reach of this course. Using something like [Google Colab][3] will allow anyone with a computer to play.
 
