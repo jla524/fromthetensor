@@ -59,7 +59,7 @@ it's hard to understand [software 2.0][1] from first principles.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_gru_lstm.ipynb)]
 [[paper](https://arxiv.org/abs/1412.3555)]
 
-- Building a Transformer (2017) -- Learn about the transformer architecture and its application.
+- Building a Transformer -- Learn about the transformer architecture and its application.
 [[paper](https://arxiv.org/abs/1706.03762)]
 
 #### Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
