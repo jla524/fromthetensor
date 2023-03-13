@@ -27,7 +27,7 @@ def download_names(names_dir, labels_dir):
             zip_ref.extractall(labels_dir)
 
 
-def fetch_names(dtype):
+def fetch_names(input_dtype, output_dtype):
     names_dir = DATA_DIR / "names"
     labels_dir = names_dir / "data" / "names"
     download_names(names_dir, labels_dir)
@@ -43,6 +43,6 @@ def fetch_names(dtype):
     train_idx, test_idx = train_test_split(
         range(len(target_langs)), test_size=0.1, random_state=1337, shuffle=True, stratify=target_langs
     )
-    train_dataset = [(dtype(input_names[i]), np.array(target_langs[i])) for i in train_idx]
-    test_dataset = [(dtype(input_names[i]), np.array(target_langs[i])) for i in test_idx]
+    train_dataset = [(input_dtype(input_names[i]), output_dtype([target_langs[i]])) for i in train_idx]
+    test_dataset = [(input_dtype(input_names[i]), output_dtype([target_langs[i]])) for i in test_idx]
     return train_dataset, test_dataset, char_to_idx, lang_to_label
