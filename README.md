@@ -15,7 +15,7 @@ it's hard to understand [software 2.0][1] from first principles.
 
 #### Section 1: Intro: Cheating our way past the Tensor -- 0.5 weeks
 
-- So about those Tensors -- Course overview. Describe how Deep Learning models are buildable using Tensors and how different architectures like CNNs and RNNs use Tensors in different ways. Understand the concept of backpropagation and gradient descent.
+- So about those Tensors -- Course overview. Describe how Deep Learning models are buildable using Tensors, and how different architectures like CNNs and RNNs use Tensors in different ways. Understand the concept of backpropagation and gradient descent.
 [[video](https://www.youtube.com/watch?v=VMj-3S1tku0)]
 
 - Accelerated learning -- Training on a personal computer may limit the reach of this course. Using something like [Google Colab][3] will allow anyone with a computer to play.
@@ -61,6 +61,7 @@ it's hard to understand [software 2.0][1] from first principles.
 
 - Building a Transformer -- Learn about the transformer architecture and its application.
 [[paper](https://arxiv.org/abs/1706.03762)]
+[[video](https://www.youtube.com/watch?v=OyFJWRnt_AY)]
 
 #### Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
 
