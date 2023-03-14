@@ -5,7 +5,7 @@ Inspired by [From the Transistor][0].
 Machine learning is hard, a lot of tutorials are hard to follow, and
 it's hard to understand [software 2.0][1] from first principles.
 
-> You wanna be an ML engineer? There's the steps to get good at that:
+> You wanna be an ML engineer? Well, here's the steps to get good at that:
 >
 > 1. Download a paper
 > 2. Implement it
