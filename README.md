@@ -24,7 +24,7 @@ it's hard to understand [software 2.0][1] from first principles.
 
 - Building a simple Neural Network -- Your first little program! Getting the model working and learning the basics of deep learning.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_from_scratch.ipynb)]
-[[video](https://www.youtube.com/watch?v=Xtws3-Pk69o)]
+[[video](https://www.youtube.com/watch?v=JRlyw6LO5qo)]
 
 - Building a simple CNN -- An intro chapter to deep learning, learn how to build a simple CNN and understand the concepts of convolution and pooling.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_cnn.ipynb)]
