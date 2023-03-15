@@ -8,7 +8,7 @@ np.random.seed(1337)
 def train(model, X_train, Y_train, optim, steps, BS=128, lossfn=F.cross_entropy, transform=lambda x: x):
     model.train()
     for i in (t := trange(steps)):
-        sample = np.random.randint(0, high=X_train.shape[0], size=(BS))
+        sample = np.random.randint(0, X_train.shape[0], size=(BS))
         x = torch.tensor(transform(X_train[sample]))
         y = torch.tensor(Y_train[sample])
         out = model(x)
