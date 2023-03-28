@@ -59,6 +59,8 @@ it's hard to understand [software 2.0][1] from first principles.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_gru_lstm.ipynb)]
 [[paper](https://arxiv.org/abs/1412.3555)]
 
+- Implementing CBOW and Skip-Gram -- Learn about the word2vec architecture and its application.
+
 - Building a Transformer -- Learn about the transformer architecture and its application.
 [[paper](https://arxiv.org/abs/1706.03762)]
 [[video](https://www.youtube.com/watch?v=OyFJWRnt_AY)]
