@@ -45,7 +45,7 @@ it's hard to understand [software 2.0][1] from first principles.
 [[paper](https://papers.nips.cc/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html)]
 
 - Implementing ResNet -- Learn how to implement ResNet for image classification tasks.
-[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_resnet.ipynb)]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/cifar_resnet.ipynb)]
 [[paper](https://arxiv.org/abs/1512.03385)]
 
 - Building a DCGAN -- Learn how to build a DCGAN and the concept of adversarial training.
@@ -58,6 +58,8 @@ it's hard to understand [software 2.0][1] from first principles.
 - Implementing GRU and LSTM -- Learn about the concepts of LSTM and GRU cells.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_gru_lstm.ipynb)]
 [[paper](https://arxiv.org/abs/1412.3555)]
+
+- Implementing CBOW and Skip-Gram -- Learn about the word2vec architecture and its application.
 
 - Building a Transformer -- Learn about the transformer architecture and its application.
 [[paper](https://arxiv.org/abs/1706.03762)]
