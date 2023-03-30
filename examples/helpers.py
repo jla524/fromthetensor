@@ -34,4 +34,3 @@ def evaluate(model, X_test, Y_test, BS=128, transform=lambda x: x, device=torch.
         preds[i*BS:(i+1)*BS] = torch.argmax(out, dim=1).detach().cpu().numpy()
     accuracy = (Y_test == preds).mean()
     print(f"test set accuracy is {accuracy}")
-    return (accuracy, preds) if return_predict else accuracy
