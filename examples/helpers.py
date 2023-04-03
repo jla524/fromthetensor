@@ -22,8 +22,7 @@ def train(model, X_train, Y_train, optim, steps, BS=128, lossfn=F.cross_entropy,
         optim.step()
         cat = output.argmax(dim=-1)
         accuracy = (cat == y).float().mean()
-        loss = loss.item()
-        t.set_description(f"loss {loss:.2f} accuracy {accuracy:.2f}")
+        t.set_description(f"loss {loss.item():.2f} accuracy {accuracy:.2f}")
 
 
 def evaluate(model, X_test, Y_test, BS=128, transform=lambda x: x, device=torch.device("cpu")):
@@ -31,6 +30,6 @@ def evaluate(model, X_test, Y_test, BS=128, transform=lambda x: x, device=torch.
     preds = np.zeros(Y_test.shape)
     for i in trange((len(Y_test)-1)//BS+1):
         out = model(torch.tensor(transform(X_test[i*BS:(i+1)*BS])).to(device))
-        preds[i*BS:(i+1)*BS] = torch.argmax(out, dim=1).detach().cpu().numpy()
+        preds[i*BS:(i+1)*BS] = torch.argmax(out, dim=-1).detach().cpu().numpy()
     accuracy = (Y_test == preds).mean()
     print(f"test set accuracy is {accuracy}")
