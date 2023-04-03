@@ -60,10 +60,11 @@ it's hard to understand [software 2.0][1] from first principles.
 [[paper](https://arxiv.org/abs/1412.3555)]
 
 - Implementing CBOW and Skip-Gram -- Learn about the word2vec architecture and its application.
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/cbow_skipgram.ipynb)]
+[[paper](https://arxiv.org/abs/1301.3781)]
 
 - Building a Transformer -- Learn about the transformer architecture and its application.
 [[paper](https://arxiv.org/abs/1706.03762)]
-[[video](https://www.youtube.com/watch?v=OyFJWRnt_AY)]
 
 #### Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
 
