@@ -64,11 +64,13 @@ it's hard to understand [software 2.0][1] from first principles.
 [[paper](https://arxiv.org/abs/1301.3781)]
 
 - Building a Transformer -- Learn about the transformer architecture and its application.
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/transformer.ipynb)]
 [[paper](https://arxiv.org/abs/1706.03762)]
 
 #### Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
 
 - Building a Stable Diffusion model -- Learn about the Stable Diffusion architecture and its application in image generation tasks.
+[[code](https://github.com/geohot/tinygrad/blob/master/examples/stable_diffusion.py)]
 [[paper](https://arxiv.org/abs/2112.10752)]
 
 [0]: https://github.com/geohot/fromthetransistor
