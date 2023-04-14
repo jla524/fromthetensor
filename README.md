@@ -36,7 +36,7 @@ it's hard to understand [software 2.0][1] from first principles.
 
 #### Section 3: Implementing Papers (Part 1): Vision models -- 3 weeks
 
-- Implementing LeNet-5 -- Learn about the LeNet architecture and its application.
+- Implementing LeNet -- Learn about the LeNet architecture and its application.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_lenet.ipynb)]
 [[paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
