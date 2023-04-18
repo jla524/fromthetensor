@@ -27,36 +27,36 @@ it's hard to understand [software 2.0][1] from first principles.
 [[video](https://www.youtube.com/watch?v=JRlyw6LO5qo)]
 
 - Building a simple CNN -- An intro chapter to deep learning, learn how to build a simple CNN and understand the concepts of convolution and pooling.
-[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_cnn.ipynb)]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/cnn.ipynb)]
 [[video](https://www.youtube.com/watch?v=KuXjwB4LzSA)]
 
 - Building a simple RNN -- Learn the basics of Recurrent Neural Networks and understand the concept of "memory" that helps them store states of previous inputs.
-[[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_rnn.ipynb)]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/rnn.ipynb)]
 [[video](https://www.youtube.com/watch?v=WCUNPb-5EYI)]
 
 #### Section 3: Implementing Papers (Part 1): Vision models -- 3 weeks
 
 - Implementing LeNet -- Learn about the LeNet architecture and its application.
-[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_lenet.ipynb)]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/lenet.ipynb)]
 [[paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
 - Implementing AlexNet -- Learn how to implement AlexNet for image classification tasks.
-[[code](https://github.com/jla524/fromthetensor/blob/main/examples/cifar_alexnet.ipynb)]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/alexnet.ipynb)]
 [[paper](https://papers.nips.cc/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html)]
 
 - Implementing ResNet -- Learn how to implement ResNet for image classification tasks.
-[[code](https://github.com/jla524/fromthetensor/blob/main/examples/cifar_resnet.ipynb)]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/resnet.ipynb)]
 [[paper](https://arxiv.org/abs/1512.03385)]
 
 - Building a DCGAN -- Learn how to build a DCGAN and the concept of adversarial training.
-[[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_dcgan.ipynb)]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/dcgan.ipynb)]
 [[GAN paper](https://arxiv.org/abs/1406.2661)]
 [[DCGAN paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
 
-#### Section 4: Implementing Papers (Part 2): Language models -- 2 weeks
+#### Section 4: Implementing Papers (Part 2): Language models -- 3 weeks
 
 - Implementing GRU and LSTM -- Learn about the concepts of LSTM and GRU cells.
-[[code](https://github.com/jla524/fromthetensor/blob/main/examples/names_gru_lstm.ipynb)]
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/gru_lstm.ipynb)]
 [[paper](https://arxiv.org/abs/1412.3555)]
 
 - Implementing CBOW and Skip-Gram -- Learn about the word2vec architecture and its application.
