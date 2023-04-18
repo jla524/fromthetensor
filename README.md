@@ -50,8 +50,7 @@ it's hard to understand [software 2.0][1] from first principles.
 
 - Building a DCGAN -- Learn how to build a DCGAN and the concept of adversarial training.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/dcgan.ipynb)]
-[[GAN paper](https://arxiv.org/abs/1406.2661)]
-[[DCGAN paper](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)]
+[[paper](https://arxiv.org/abs/1511.06434)]
 
 #### Section 4: Implementing Papers (Part 2): Language models -- 3 weeks
 
