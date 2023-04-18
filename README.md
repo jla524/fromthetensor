@@ -67,6 +67,10 @@ it's hard to understand [software 2.0][1] from first principles.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/transformer.ipynb)]
 [[paper](https://arxiv.org/abs/1706.03762)]
 
+- Fine-tuning a BERT -- Learn about the BERT architecture and fine-tuning a pre-trained model.
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/bert.ipynb)]
+[[paper](https://arxiv.org/abs/1810.04805)]
+
 #### Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
 
 - Building a Stable Diffusion model -- Learn about the Stable Diffusion architecture and its application in image generation tasks.
