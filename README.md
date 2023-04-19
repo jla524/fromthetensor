@@ -13,14 +13,14 @@ it's hard to understand [software 2.0][1] from first principles.
 >
 > -- *[George Hotz][2]*
 
-#### Section 1: Intro: Cheating our way past the Tensor -- 0.5 weeks
+#### Section 1: Intro: Cheating our way past the Tensor -- 1 week
 
 - So about those Tensors -- Course overview. Describe how Deep Learning models are buildable using Tensors, and how different architectures like CNNs and RNNs use Tensors in different ways. Understand the concept of backpropagation and gradient descent.
 [[video](https://www.youtube.com/watch?v=VMj-3S1tku0)]
 
 - Accelerated learning -- Training on a personal computer may limit the reach of this course. Using something like [Google Colab][3] will allow anyone with a computer to play.
 
-#### Section 2: Deep Learning: What is deep learning anyway? -- 0.5 weeks
+#### Section 2: Deep Learning: What is deep learning anyway? -- 1 week
 
 - Building a simple Neural Network -- Your first little program! Getting the model working and learning the basics of deep learning.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/mnist_from_scratch.ipynb)]
@@ -70,7 +70,7 @@ it's hard to understand [software 2.0][1] from first principles.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/bert.ipynb)]
 [[paper](https://arxiv.org/abs/1810.04805)]
 
-#### Section 5: Implementing Papers (Part 3): Vision-Language models -- 3 weeks
+#### Section 5: Implementing Papers (Part 3): Vision-Language models -- 1 week
 
 - Building a Stable Diffusion model -- Learn about the Stable Diffusion architecture and its application in image generation tasks.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/stable_diffusion.ipynb)]
