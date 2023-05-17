@@ -24,7 +24,7 @@ def download_names(names_dir, labels_dir):
         assert response.status_code == 200
         zip_file = BytesIO(response.content)
         with ZipFile(zip_file, "r") as zip_ref:
-            zip_ref.extractall(labels_dir)
+            zip_ref.extractall(names_dir)
 
 
 def fetch_names(input_dtype, output_dtype):
