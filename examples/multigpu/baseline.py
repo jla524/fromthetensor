@@ -1,6 +1,4 @@
 from pathlib import Path
-import numpy as np
-from PIL import Image
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -78,12 +76,12 @@ if __name__ == "__main__":
     training_data = CIFAR10(DATASET_DIR, train=True, transform=transforms, download=True)
     test_data = CIFAR10(DATASET_DIR, train=False, transform=transforms, download=True)
 
-    train_dataloader = DataLoader(training_data, batch_size=64, shuffle=True)
-    test_dataloader = DataLoader(test_data, batch_size=64, shuffle=True)
+    train_dataloader = DataLoader(training_data, batch_size=64, shuffle=True, pin_memory=True)
+    test_dataloader = DataLoader(test_data, batch_size=64, shuffle=True, pin_memory=True)
 
     model = ResNet().to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.005, weight_decay=0.0005, momentum=0.9)
 
-    for _ in range(10):
-        train(model, train_dataloader, optimizer)
-        evaluate(model, test_dataloader)
+    for _ in range(5):
+        train(model, train_dataloader, optimizer, device=device)
+        evaluate(model, test_dataloader, device=device)

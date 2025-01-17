@@ -7,12 +7,15 @@ np.random.seed(1337)
 
 
 def get_gpu():
-    return "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+    if torch.cuda.is_available():
+        return "cuda:0"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
-def train(model, dataloader, optim, lossfn=F.cross_entropy):
+def train(model, dataloader, optim, lossfn=F.cross_entropy, device="cpu"):
     model.train()
-    device = get_gpu()
     for x, y in (t := tqdm(dataloader, total=len(dataloader))):
         x = x.to(device)
         y = y.to(device)
@@ -26,9 +29,8 @@ def train(model, dataloader, optim, lossfn=F.cross_entropy):
         t.set_description(f"loss {loss.item():.2f} accuracy {accuracy:.2f}")
 
 
-def evaluate(model, dataloader):
+def evaluate(model, dataloader, device="cpu"):
     correct = 0
-    device = get_gpu()
     with torch.no_grad():
         model.eval()
         for x, y in tqdm(dataloader, total=len(dataloader)):
