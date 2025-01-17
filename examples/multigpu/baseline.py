@@ -3,8 +3,9 @@ import numpy as np
 from PIL import Image
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR10
-from torchvision.transforms import Resize
+from torchvision.transforms import Compose, Resize, ToTensor
 from helpers import get_gpu, train, evaluate
 
 torch.manual_seed(0)
@@ -59,13 +60,9 @@ class ResNet(nn.Module):
 
     def __call__(self, x):
         x = self.bn1(self.conv1(x)).relu()
-        print(x.shape)
         x = self.maxpool(x)
-        print(x.shape)
         x = self.layer1(x)
-        print(x.shape)
         x = self.layer2(x)
-        print(x.shape)
         x = self.layer3(x)
         x = self.layer4(x)
         x = self.avgpool(x)
@@ -74,18 +71,19 @@ class ResNet(nn.Module):
         return x
 
 
-def transform(x):
-    x = Resize()
-    x = x.reshape(-1, 3, 224, 224) / 255.0 - 0.5
-    return x
-
-
 if __name__ == "__main__":
     device = get_gpu()
-    X_train, Y_train = CIFAR10(DATASET_DIR, train=True, transform=transform, download=True)
-    X_test, Y_test = CIFAR10(DATASET_DIR, train=False, transform=transform, download=True)
+    transforms = Compose([Resize((224, 224)), ToTensor()])
+
+    training_data = CIFAR10(DATASET_DIR, train=True, transform=transforms, download=True)
+    test_data = CIFAR10(DATASET_DIR, train=False, transform=transforms, download=True)
+
+    train_dataloader = DataLoader(training_data, batch_size=64, shuffle=True)
+    test_dataloader = DataLoader(test_data, batch_size=64, shuffle=True)
 
     model = ResNet().to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.005, weight_decay=0.0005, momentum=0.9)
-    train(model, X_train, Y_train, optimizer, 50000, BS=16, transform=transform, device=device)
-    evaluate(model, X_test, Y_test, transform=transform, device=device)
+
+    for _ in range(10):
+        train(model, train_dataloader, optimizer)
+        evaluate(model, test_dataloader)
