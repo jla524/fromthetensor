@@ -1,12 +1,15 @@
+from pathlib import Path
 import numpy as np
 from PIL import Image
 import torch
 from torch import nn
-from datasets import load_dataset
+from torchvision.datasets import CIFAR10
+from torchvision.transforms import Resize
 from helpers import get_gpu, train, evaluate
 
 torch.manual_seed(0)
-device = get_gpu()
+
+DATASET_DIR = Path(__file__).parent.parent / "datasets"
 
 
 class BasicBlock(nn.Module):
@@ -56,9 +59,13 @@ class ResNet(nn.Module):
 
     def __call__(self, x):
         x = self.bn1(self.conv1(x)).relu()
+        print(x.shape)
         x = self.maxpool(x)
+        print(x.shape)
         x = self.layer1(x)
+        print(x.shape)
         x = self.layer2(x)
+        print(x.shape)
         x = self.layer3(x)
         x = self.layer4(x)
         x = self.avgpool(x)
@@ -68,20 +75,15 @@ class ResNet(nn.Module):
 
 
 def transform(x):
-    x = x.reshape(-1, 1, 32, 32)
-    x = [[Image.fromarray(z).resize((224, 224)) for z in y] for y in x]
-    x = np.stack([np.stack([np.asarray(z) for z in y], axis=0) for y in x], axis=0)
-    x = x.reshape(-1, 3, 224, 224)
+    x = Resize()
+    x = x.reshape(-1, 3, 224, 224) / 255.0 - 0.5
     return x
 
 
 if __name__ == "__main__":
-    dataset = load_dataset("cifar10")
-
-    X_train = (np.array([np.array(image) for image in dataset["train"]["img"]]) / 255.0 - 0.5) / 0.25
-    Y_train = np.array(dataset["train"]["label"], dtype=np.int32)
-    X_test = (np.array([np.array(image) for image in dataset["test"]["img"]]) / 255.0 - 0.5) / 0.25
-    Y_test = np.array(dataset["test"]["label"], dtype=np.int32)
+    device = get_gpu()
+    X_train, Y_train = CIFAR10(DATASET_DIR, train=True, transform=transform, download=True)
+    X_test, Y_test = CIFAR10(DATASET_DIR, train=False, transform=transform, download=True)
 
     model = ResNet().to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.005, weight_decay=0.0005, momentum=0.9)
