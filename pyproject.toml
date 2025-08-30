@@ -9,7 +9,9 @@ dependencies = [
     "ipykernel>=6.29.5",
     "ipywidgets>=8.1.5",
     "jupyter>=1.1.1",
+    "matplotlib>=3.10.3",
     "pillow>=11.1.0",
     "torch>=2.6.0",
     "tqdm>=4.67.1",
+    "unidecode>=1.4.0",
 ]
