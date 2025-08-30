@@ -28,7 +28,8 @@ def name_to_array(name, char_to_idx):
     return array
 
 
-def fetch_names(input_dtype, output_dtype):
+def fetch_names(input_dtype, output_dtype=None):
+    output_dtype = output_dtype or input_dtype
     names_dir = DATA_DIR / "names"
     labels_dir = names_dir / "data" / "names"
     download_names(names_dir, labels_dir)
