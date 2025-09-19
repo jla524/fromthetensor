@@ -1,7 +1,7 @@
 [project]
 name = "fromthetensor"
 version = "0.1.0"
-description = "Add your description here"
+description = "From the Tensor to Stable Diffusion, a rough outline for a 1 week course."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

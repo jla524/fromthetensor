@@ -74,7 +74,17 @@ it's hard to understand [software 2.0][1] from first principles.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/stable_diffusion.ipynb)]
 [[paper](https://arxiv.org/abs/2112.10752)]
 
+### Beyond the Tensor
+
+> when ppl ask me how to get better at being a ML engineer i tell them to stop learning about ML and start learning about systems
+>
+> -- [@yoobinray][4]
+
+See [ideas.md][5] for some ideas.
+
 [0]: https://github.com/geohot/fromthetransistor
 [1]: https://karpathy.medium.com/software-2-0-a64152b37c35
 [2]: https://youtu.be/N2bXEUSAiTI?t=1315
 [3]: https://colab.research.google.com
+[4]: https://x.com/yoobinray/status/1965595263290200189
+[5]: https://github.com/jla524/fromthetensor/blob/main/ideas.md
