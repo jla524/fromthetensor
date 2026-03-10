@@ -67,6 +67,7 @@ it's hard to understand [software 2.0][1] from first principles.
 - Fine-tuning a BERT -- Learn about the BERT architecture and fine-tuning a pre-trained model.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/bert.ipynb)]
 [[paper](https://arxiv.org/abs/1810.04805)]
+- Pre-training GPT2 -- Learn about the GPT2 architecture and pre-training a model from scratch.
 
 #### Section 5: Implementing Papers (Part 3): Vision-Language models -- 1 week
 
