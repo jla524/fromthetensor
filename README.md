@@ -68,6 +68,10 @@ it's hard to understand [software 2.0][1] from first principles.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/bert.ipynb)]
 [[paper](https://arxiv.org/abs/1810.04805)]
 
+- Running inference with GPT2 -- Learn about the GPT2 architecture and explore text generation strategies.
+[[code](https://github.com/jla524/fromthetensor/blob/main/examples/gpt2.ipynb)]
+[[paper](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)]
+
 #### Section 5: Implementing Papers (Part 3): Vision-Language models -- 1 week
 
 - Building a Stable Diffusion model -- Learn about the Stable Diffusion architecture and its application in image generation tasks.
