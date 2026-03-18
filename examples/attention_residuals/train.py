@@ -80,6 +80,7 @@ class TrainingConfig:
     steps_per_epoch: int = 50  # 5,000 steps total (100 epochs × 50)
     lr: float = 1e-4
     weight_decay: float = 0.01
+    dropout: float = 0.1  # Dropout rate (will be higher for attnres)
     warmup_steps: int = 100
     max_grad_norm: float = 1.0
     device: str = "auto"
@@ -770,7 +771,8 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
         print(f"Using device: {device}")
         print(f"Model type: {config.model}")
         print(
-            f"Config: {config.hidden_dim}d, {config.num_layers}L, {config.num_heads}H"
+            f"Config: {config.hidden_dim}d, {config.num_layers}L, {config.num_heads}H, "
+            f"dropout={config.dropout}, wd={config.weight_decay}"
         )
 
     # Create model
@@ -784,6 +786,7 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
         block_size=config.block_size,
         seq_len=config.seq_len,
         device=device,
+        dropout=config.dropout,
     )
 
     num_params = count_parameters(model)
@@ -1060,20 +1063,35 @@ def compare_models(
         "epochs": epochs,
         "lr": lr,
         "device": device,
+        "dropout": 0.1,  # Base dropout rate
     }
 
-    # Train Attention Residual model
+    # Train Attention Residual model with higher regularization
+    # Attention Residual has ~800K more parameters from attention layers,
+    # which can cause overfitting without proper regularization
     print("\n" + "-" * 70)
     print("Training Attention Residual Model...")
+    print("  (Higher dropout=0.15, weight_decay=0.02 for regularization)")
     print("-" * 70)
-    attnres_config = TrainingConfig(model="attnres", **base_config)
+    attnres_config = TrainingConfig(
+        model="attnres",
+        dropout=0.15,  # Higher dropout for attention residual model
+        weight_decay=0.02,  # Stronger weight decay
+        **{k: v for k, v in base_config.items() if k not in ["dropout"]},
+    )
     attnres_results = train_model(attnres_config, verbose=True)
 
     # Train Standard model
     print("\n" + "-" * 70)
     print("Training Standard Transformer Model...")
+    print("  (Standard dropout=0.1, weight_decay=0.01)")
     print("-" * 70)
-    std_config = TrainingConfig(model="standard", **base_config)
+    std_config = TrainingConfig(
+        model="standard",
+        dropout=0.1,  # Standard dropout
+        weight_decay=0.01,  # Standard weight decay
+        **{k: v for k, v in base_config.items() if k not in ["dropout"]},
+    )
     std_results = train_model(std_config, verbose=True)
 
     # Compute efficiency metrics
@@ -1148,6 +1166,13 @@ def compare_models(
     print(f"  - Convergence Speedup: {convergence_speedup:.2f}x")
     print(f"  - Compute Efficiency: {compute_efficiency:.2f}x")
 
+    print(f"\n{'─' * 70}")
+    print("TRAINING CONFIGURATION")
+    print(f"{'─' * 70}")
+    print(f"  Attention Residual: dropout=0.15, weight_decay=0.02")
+    print(f"  Standard:           dropout=0.10, weight_decay=0.01")
+    print(f"  (Higher regularization for Attention Residual due to extra parameters)")
+
     # Save results
     comparison = {
         "attnres": attnres_results,
@@ -1175,6 +1200,16 @@ def compare_models(
             "attnres_total_epochs": attnres_epochs,
             "std_total_epochs": std_epochs,
             "max_epochs": epochs,
+        },
+        "training_config": {
+            "attnres": {
+                "dropout": 0.15,
+                "weight_decay": 0.02,
+            },
+            "standard": {
+                "dropout": 0.10,
+                "weight_decay": 0.01,
+            },
         },
     }
 
