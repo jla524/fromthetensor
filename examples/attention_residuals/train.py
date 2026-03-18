@@ -36,7 +36,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, asdict
 from collections import Counter, deque
-import gc
 
 import numpy as np
 import torch
@@ -57,49 +56,6 @@ from attention_residuals import (
     count_parameters,
 )
 from bpe_tokenizer import get_or_train_tokenizer, BPETokenizerWrapper
-
-
-# ============================================================================
-# Memory Monitoring
-# ============================================================================
-
-try:
-    import psutil
-
-    HAS_PSUTIL = True
-except ImportError:
-    HAS_PSUTIL = False
-
-
-def log_memory_usage(prefix: str = ""):
-    """Log current memory usage to help diagnose memory leaks."""
-    if HAS_PSUTIL:
-        process = psutil.Process()
-        ram_mb = process.memory_info().rss / 1024 / 1024
-        ram_percent = psutil.virtual_memory().percent
-        swap_mb = psutil.swap_memory().used / 1024 / 1024
-        print(
-            f"{prefix}RAM: {ram_mb:.0f}MB ({ram_percent:.1f}%) | Swap: {swap_mb:.0f}MB"
-        )
-
-        # Warn if approaching swap
-        if ram_percent > 85:
-            print(
-                f"⚠️  WARNING: High RAM usage ({ram_percent:.1f}%) - may cause swapping!"
-            )
-        if swap_mb > 100:
-            print(
-                f"⚠️  WARNING: Swap usage detected ({swap_mb:.0f}MB) - performance degraded!"
-            )
-
-
-def clear_memory():
-    """Clear memory caches and force garbage collection."""
-    gc.collect()
-    if torch.backends.mps.is_available():
-        torch.mps.empty_cache()
-    elif torch.cuda.is_available():
-        torch.cuda.empty_cache()
 
 
 # ============================================================================
@@ -874,9 +830,6 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
     start_time = time.time()
 
     for epoch in range(1, config.epochs + 1):
-        # Log memory at start of epoch
-        log_memory_usage(f"Epoch {epoch} start: ")
-
         # Training epoch
         epoch_train_history = []  # Fresh history for this epoch
         global_step, epoch_train_history, _ = train_epoch(
@@ -915,55 +868,6 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
                     "val_ppl": val_metrics["perplexity"],
                 }
             )
-
-        print(
-            f"Epoch {epoch} Validation - Loss: {val_metrics['loss']:.4f}, PPL: {val_metrics['perplexity']:.2f}\n"
-        )
-
-        # Log memory after validation
-        log_memory_usage(f"Epoch {epoch} end: ")
-
-        # Clear memory every epoch to prevent accumulation
-        print(f"Clearing memory caches at epoch {epoch}...")
-        clear_memory()
-        log_memory_usage(f"After cleanup: ")
-
-        # Add epoch history to rolling buffer
-        train_history.extend(epoch_train_history)
-
-        # Validation evaluation after each epoch
-        val_metrics = evaluate_model(model, val_dataset, config, device)
-        val_history.append(
-            {
-                "epoch": epoch,
-                "step": global_step,
-                "loss": val_metrics["loss"],
-                "perplexity": val_metrics["perplexity"],
-            }
-        )
-
-        # Store epoch summary (lightweight)
-        if epoch_train_history:
-            epoch_summaries.append(
-                {
-                    "epoch": epoch,
-                    "train_loss": epoch_train_history[-1]["loss"],
-                    "train_ppl": epoch_train_history[-1]["perplexity"],
-                    "val_loss": val_metrics["loss"],
-                    "val_ppl": val_metrics["perplexity"],
-                }
-            )
-
-        # Validation evaluation after each epoch
-        val_metrics = evaluate_model(model, val_dataset, config, device)
-        val_history.append(
-            {
-                "epoch": epoch,
-                "step": global_step,
-                "loss": val_metrics["loss"],
-                "perplexity": val_metrics["perplexity"],
-            }
-        )
 
         print(
             f"Epoch {epoch} Validation - Loss: {val_metrics['loss']:.4f}, PPL: {val_metrics['perplexity']:.2f}\n"
@@ -1164,14 +1068,6 @@ def compare_models(
     print("-" * 70)
     attnres_config = TrainingConfig(model="attnres", **base_config)
     attnres_results = train_model(attnres_config, verbose=True)
-
-    # Clear memory before training second model
-    print("\nClearing memory before training second model...")
-    if torch.backends.mps.is_available():
-        torch.mps.empty_cache()
-    elif torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    gc.collect()
 
     # Train Standard model
     print("\n" + "-" * 70)
