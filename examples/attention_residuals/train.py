@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """
-Attention Residuals Training Script
+Attention Residuals Training Script - SCALED FOR POWERFUL HARDWARE
 
 Comprehensive training script for reproducing the Attention Residuals
 scaling law experiments from the Kimi (MoonshotAI) paper.
+
+SCALED CONFIGURATION (for powerful machines):
+- Sequence length: 1024 (was 512) - 2x more context
+- Hidden dimension: 768 (was 512) - 50% more capacity
+- Num heads: 12 (was 8) - better attention resolution
+- Batch size: 16 (was 8) - 2x larger batches
+- Steps per epoch: 100 (was 50) - more training per epoch
+- Total training: 10,000 steps (100 epochs × 100 steps)
 
 This script:
 - Trains both Attention Residual and Standard Transformer models
@@ -19,8 +27,8 @@ Usage:
     # Train Standard model (baseline)
     python train.py --model standard --epochs 10
 
-    # Run comparison across model sizes
-    python train.py --compare --seq_len 128 --batch_size 32
+    # Run comparison with scaled defaults
+    python train.py --compare
 
     # Full scaling law experiment
     python train.py --scaling --hidden_dims 256 512 1024 --num_layers_list 4 8 12
@@ -69,28 +77,30 @@ class TrainingConfig:
 
     model: str = "attnres"  # "attnres" or "standard"
     vocab_size: int = 10000  # BPE vocabulary size (word-level tokenization)
-    hidden_dim: int = 512
+    hidden_dim: int = 768  # Increased from 512 for more capacity
     num_layers: int = 24  # 24 layers = 6 blocks with block_size=4
-    num_heads: int = 8
-    ff_dim: int = 2048
+    num_heads: int = 12  # Increased from 8 to match hidden_dim (768/12=64 per head)
+    ff_dim: int = 3072  # Increased from 2048 (4x hidden_dim)
     block_size: int = 4
-    seq_len: int = 512  # Increased from 128 for better context (512 = 4× longer)
-    batch_size: int = 8  # Reduced from 32 to prevent OOM with longer sequences
+    seq_len: int = 1024  # DOUBLED from 512 - more context for better language modeling
+    batch_size: int = 16  # Doubled from 8 - more samples per batch
     epochs: int = 100  # Increased for proper convergence (was 10)
-    steps_per_epoch: int = 50  # 5,000 steps total (100 epochs × 50)
+    steps_per_epoch: int = 100  # Doubled from 50 - more training per epoch
     lr: float = 1e-4
     weight_decay: float = 0.01
     dropout: float = 0.1  # Dropout rate (will be higher for attnres)
-    warmup_steps: int = 100
+    warmup_steps: int = 200  # Doubled from 100 for longer training
     max_grad_norm: float = 1.0
     device: str = "auto"
     seed: int = 42
     save_dir: str = "./checkpoints"
     log_interval: int = 10
     checkpoint_interval: int = 1000
-    patience: int = 50  # Steps without improvement before early stopping
+    patience: int = 100  # Doubled from 50 - be more patient with larger model
     convergence_threshold: float = 0.001  # Relative improvement threshold
-    min_steps_for_convergence: int = 100  # Minimum steps before checking convergence
+    min_steps_for_convergence: int = (
+        200  # Doubled from 100 - need more steps for large model
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -1007,13 +1017,13 @@ def check_convergence(
 
 
 def compare_models(
-    hidden_dim: int = 512,
+    hidden_dim: int = 768,  # Scaled up from 512
     num_layers: int = 24,  # 24 layers for proper AttnRes with 6 blocks
-    num_heads: int = 8,
-    ff_dim: int = 2048,
+    num_heads: int = 12,  # Scaled up from 8 to match hidden_dim
+    ff_dim: int = 3072,  # Scaled up from 2048 (4x hidden_dim)
     block_size: int = 4,
-    seq_len: int = 512,  # Increased from 128 for better context
-    batch_size: int = 8,  # Reduced from 32 to prevent OOM
+    seq_len: int = 1024,  # DOUBLED from 512 for more context
+    batch_size: int = 16,  # Doubled from 8
     epochs: int = 100,  # Increased for proper convergence
     lr: float = 1e-4,
     vocab_size: int = 10000,  # BPE vocabulary size
@@ -1030,18 +1040,18 @@ def compare_models(
     4. Generates comparison plots
 
     Args:
-        hidden_dim: Hidden dimension
-        num_layers: Number of layers
-        num_heads: Number of attention heads
-        ff_dim: Feed-forward dimension
-        block_size: Block size for Attention Residuals
-        seq_len: Sequence length
-        batch_size: Batch size
-        epochs: Number of epochs
-        lr: Learning rate
-        vocab_size: Vocabulary size
-        device: Device to use
-        save_plots: Whether to save comparison plots
+        hidden_dim: Hidden dimension (default: 768)
+        num_layers: Number of layers (default: 24)
+        num_heads: Number of attention heads (default: 12)
+        ff_dim: Feed-forward dimension (default: 3072)
+        block_size: Block size for Attention Residuals (default: 4)
+        seq_len: Sequence length (default: 1024)
+        batch_size: Batch size (default: 16)
+        epochs: Number of epochs (default: 100)
+        lr: Learning rate (default: 1e-4)
+        vocab_size: Vocabulary size (default: 10000)
+        device: Device to use (default: "auto")
+        save_plots: Whether to save comparison plots (default: True)
 
     Returns:
         Dictionary with comparison results
