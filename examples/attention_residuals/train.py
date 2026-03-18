@@ -98,9 +98,6 @@ class TrainingConfig:
     checkpoint_interval: int = 1000
     patience: int = 10  # Epochs without improvement before early stopping
     convergence_threshold: float = 0.001  # Relative improvement threshold
-    min_steps_for_convergence: int = (
-        200  # Doubled from 100 - need more steps for large model
-    )
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -644,18 +641,6 @@ def train_epoch(
                     "grad": f"{grad_norm:.4f}",
                 }
             )
-
-        # Check for convergence during training
-        if global_step >= config.min_steps_for_convergence:
-            converged = check_convergence(
-                history, window=config.patience, threshold=config.convergence_threshold
-            )
-            if converged:
-                print(
-                    f"\n🎯 Convergence detected at step {global_step}! Early stopping."
-                )
-                pbar.close()
-                break
 
         # Save checkpoint periodically
         if global_step % config.checkpoint_interval == 0:
