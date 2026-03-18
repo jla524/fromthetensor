@@ -7,3 +7,4 @@
 - multi-gpu inference and training (with accelerate?)
 - experiment with hardware accelerators
 - agents and reinforcement learning
+- implementing research papers (e.g. attention residuals)

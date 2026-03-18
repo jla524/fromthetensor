@@ -6,12 +6,32 @@ import torch.nn.functional as F
 np.random.seed(0)
 
 
-def get_device() -> str:
-    backends = {torch.cuda: "cuda", torch.backends.mps: "mps"}
-    for backend, name in backends.items():
-        if backend.is_available():
-            return name
-    return "cpu"
+def get_device(preferred: str = "auto") -> torch.device:
+    """
+    Get the best available PyTorch device.
+
+    Args:
+        preferred: Preferred device ("cuda", "mps", "cpu", or "auto").
+                  "auto" will select the best available device.
+
+    Returns:
+        torch.device object
+
+    Examples:
+        >>> device = get_device()  # Auto-select best device
+        >>> device = get_device("cuda")  # Force CUDA
+        >>> device = get_device("cpu")  # Force CPU
+    """
+    if preferred != "auto":
+        return torch.device(preferred)
+
+    # Auto-detect best available device
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
 
 
 def train(
@@ -50,9 +70,11 @@ def evaluate(
 ):
     model.eval()
     preds = np.zeros(Y_test.shape)
-    for i in trange((len(Y_test)-1)//batch_size+1):
-        x = target_transform(X_test[i*batch_size:(i+1)*batch_size])
+    for i in trange((len(Y_test) - 1) // batch_size + 1):
+        x = target_transform(X_test[i * batch_size : (i + 1) * batch_size])
         y = model(torch.tensor(x, device=device, requires_grad=False))
-        preds[i*batch_size:(i+1)*batch_size] = y.argmax(dim=-1).detach().cpu().numpy()
+        preds[i * batch_size : (i + 1) * batch_size] = (
+            y.argmax(dim=-1).detach().cpu().numpy()
+        )
     accuracy = (Y_test == preds).mean()
     print(f"test set accuracy is {accuracy}")

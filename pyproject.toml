@@ -13,6 +13,7 @@ dependencies = [
     "jupyter>=1.1.1",
     "matplotlib>=3.10.3",
     "pillow>=11.1.0",
+    "tokenizers>=0.22.0",
     "torch>=2.6.0",
     "tqdm>=4.67.1",
     "transformers>=4.56.1",
