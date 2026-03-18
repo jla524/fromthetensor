@@ -904,7 +904,7 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
         "final_val_loss": final_val_metrics["loss"],
         "final_val_perplexity": final_val_metrics["perplexity"],
         "convergence_step": convergence_step,
-        "train_history": train_history,
+        "train_history": list(train_history),
         "val_history": val_history,
         "tokens_processed": global_step * config.batch_size * config.seq_len,
         "converged": converged,
