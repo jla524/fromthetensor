@@ -96,7 +96,7 @@ class TrainingConfig:
     save_dir: str = "./checkpoints"
     log_interval: int = 10
     checkpoint_interval: int = 1000
-    patience: int = 100  # Doubled from 50 - be more patient with larger model
+    patience: int = 10  # Epochs without improvement before early stopping
     convergence_threshold: float = 0.001  # Relative improvement threshold
     min_steps_for_convergence: int = (
         200  # Doubled from 100 - need more steps for large model
@@ -838,6 +838,7 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
     converged = False
     best_val_loss = float("inf")
     epochs_without_improvement = 0
+    epoch = 0  # Initialize to fix scope issue
 
     # Training loop
     start_time = time.time()
@@ -892,12 +893,14 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
             epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
-            if epochs_without_improvement >= config.patience // config.steps_per_epoch:
+            if epochs_without_improvement >= config.patience:
                 print(f"\n🎯 Convergence detected at epoch {epoch}! Early stopping.")
+                print(f"   (No improvement for {epochs_without_improvement} epochs)")
                 converged = True
                 break
 
     total_time = time.time() - start_time
+    final_epoch = epoch if converged else config.epochs
 
     # Final evaluation on validation set
     final_val_metrics = evaluate_model(model, val_dataset, config, device)
@@ -921,7 +924,7 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
         "val_history": val_history,
         "tokens_processed": global_step * config.batch_size * config.seq_len,
         "converged": converged,
-        "total_epochs": epoch if converged else config.epochs,
+        "total_epochs": final_epoch,
     }
 
     if verbose:
