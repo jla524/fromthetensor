@@ -591,33 +591,16 @@ def compute_depth_wise_magnitudes(model: nn.Module, x: torch.Tensor) -> List[flo
 
 def compute_output_magnitude(model: nn.Module, x: torch.Tensor) -> float:
     """
-    Compute average output magnitude across layers.
+    Compute average hidden-state magnitude across all layers.
 
-    This helps verify the paper's claim about bounded growth.
+    Delegates to compute_depth_wise_magnitudes so both AttnRes and Standard
+    models are handled correctly via forward hooks rather than manual layer
+    calls (which broke when TransformerLayerWithAttnRes changed signature).
     """
-    model.eval()
-    with torch.no_grad():
-        # Get embeddings
-        batch_size, seq_len = x.shape
-        positions = (
-            torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)
-        )
-
-        if hasattr(model, "embedding"):
-            h = model.embedding(x) + model.pos_embedding(positions)
-        else:
-            return 0.0
-
-        # Track magnitudes through layers
-        magnitudes = [h.norm(dim=-1).mean().item()]
-
-        if hasattr(model, "layers"):
-            for layer in model.layers:
-                h = layer(h)
-                magnitudes.append(h.norm(dim=-1).mean().item())
-
-        # Return mean magnitude
-        return sum(magnitudes) / len(magnitudes)
+    mags = compute_depth_wise_magnitudes(model, x)
+    if not mags:
+        return 0.0
+    return sum(mags) / len(mags)
 
 
 def get_memory_usage(device: torch.device) -> float:
