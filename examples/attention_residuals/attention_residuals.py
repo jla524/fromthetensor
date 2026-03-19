@@ -591,8 +591,13 @@ class TransformerLayerWithAttnRes(nn.Module):
 
         # If this layer starts a new block (layer_idx > 0 and at boundary),
         # push the previous partial_block to blocks and reset partial.
+        # The stored representation is DETACHED: completed blocks serve as
+        # keys/values in the attention residual formula (read-only context),
+        # so gradients only need to flow through partial_block (the current
+        # block's running sum).  Detaching is architecturally correct and
+        # reduces peak activation memory from O(L·B·T·D) to O(B·T·D).
         if self.layer_idx > 0 and self.layer_idx % self.block_size == 0:
-            blocks = blocks + [partial_block]  # immutable list append
+            blocks = blocks + [partial_block.detach()]  # immutable list append
             partial_block = torch.zeros_like(partial_block)
 
         # Self-attention sublayer (Pre-Norm on the attn_res output h)
@@ -734,7 +739,9 @@ class TransformerEncoderWithAttnRes(nn.Module):
         # `blocks` is a list of completed block representations [B, T, D].
         # `partial_block` is the intra-block running sum for the current block.
         # Both are threaded through all layers explicitly (no module-level state).
-        blocks: List[torch.Tensor] = [emb]  # embeddings = block 0
+        blocks: List[torch.Tensor] = [
+            emb.detach()
+        ]  # embeddings = block 0 (read-only context)
         partial_block: torch.Tensor = torch.zeros_like(emb)
 
         # Pass through transformer layers, threading block state

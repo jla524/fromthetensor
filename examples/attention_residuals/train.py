@@ -35,6 +35,7 @@ Usage:
 """
 
 import argparse
+import gc
 import json
 import os
 import time
@@ -82,14 +83,15 @@ class TrainingConfig:
     num_heads: int = 12  # 768 / 12 = 64 per head
     ff_dim: int = 3072  # 4 × hidden_dim
     block_size: int = 4
-    seq_len: int = 512
-    batch_size: int = 64
+    seq_len: int = 256
+    batch_size: int = 32
+    grad_accum_steps: int = 2  # effective batch = batch_size × grad_accum_steps = 64
     epochs: int = 20
     steps_per_epoch: int = 500
     lr: float = 1e-4
     weight_decay: float = 0.01
     dropout: float = 0.1
-    warmup_steps: int = 500  # ~5% of total steps (20 × 500 = 10 000)
+    warmup_steps: int = 500  # ~5% of total optimizer steps (20 × 500 = 10 000)
     max_grad_norm: float = 1.0
     device: str = "auto"
     seed: int = 42
@@ -669,6 +671,7 @@ def train_epoch(
     """
     model.train()
     device = next(model.parameters()).device
+    accum = max(1, config.grad_accum_steps)
 
     epoch_loss = 0.0
     epoch_ppl = 0.0
@@ -677,62 +680,65 @@ def train_epoch(
 
     for step in pbar:
         global_step += 1
-
-        # Get batch
         start_time = time.time()
-        x, y = dataset.get_batch(config.batch_size, device)
 
-        # Forward pass
-        logits = model(x)
-
-        # Compute loss (next token prediction)
-        loss = F.cross_entropy(
-            logits.reshape(-1, config.vocab_size),
-            y.reshape(-1),
-            ignore_index=-100,
-        )
-
-        # Backward pass
+        # --- Gradient accumulation ---
+        # Accumulate gradients over `accum` micro-batches, then take one
+        # optimizer step.  Peak activation memory = batch_size (not
+        # batch_size × accum), while the effective batch size is their product.
         optimizer.zero_grad()
-        loss.backward()
+        accum_loss = 0.0
+        last_x = None
 
-        # Gradient clipping
+        for micro_step in range(accum):
+            x, y = dataset.get_batch(config.batch_size, device)
+            last_x = x
+
+            logits = model(x)
+            micro_loss = F.cross_entropy(
+                logits.reshape(-1, config.vocab_size),
+                y.reshape(-1),
+                ignore_index=-100,
+            )
+            # Scale loss so gradients are averaged across micro-batches
+            (micro_loss / accum).backward()
+            accum_loss += micro_loss.item() / accum
+
+        loss_val = accum_loss
+
+        # Gradient clipping and optimizer step
         grad_norm = compute_gradient_norm(model)
 
-        # Per-layer gradient norms (for gradient uniformity analysis)
         layer_grad_norms: List[float] = []
         if track_layer_grads and global_step % 50 == 0:
             layer_grad_norms = compute_per_layer_gradient_norms(model)
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
-
-        # Optimizer step
         optimizer.step()
         scheduler.step()
 
-        # Accumulate FLOPs
-        cumulative_flops += flops_per_step
+        # FLOPs count covers all micro-batches in this optimizer step
+        cumulative_flops += flops_per_step * accum
 
-        # Compute metrics
+        # Metrics
         elapsed = (time.time() - start_time) * 1000  # ms
-        perplexity = math.exp(min(loss.item(), 20.0))  # cap at e^20 to avoid overflow
+        perplexity = math.exp(min(loss_val, 20.0))
         memory = get_memory_usage(device)
-        tokens_per_sec = (config.batch_size * config.seq_len) / (elapsed / 1000)
+        effective_tokens = config.batch_size * accum * config.seq_len
+        tokens_per_sec = effective_tokens / (elapsed / 1000)
 
-        # Track output magnitude periodically
+        # Track output magnitude periodically (no_grad, single micro-batch)
         output_mag = 0.0
-        if global_step % 100 == 0:
-            output_mag = compute_output_magnitude(model, x)
+        if global_step % 100 == 0 and last_x is not None:
+            output_mag = compute_output_magnitude(model, last_x)
 
-        # Update epoch stats
-        epoch_loss += loss.item()
+        epoch_loss += loss_val
         epoch_ppl += perplexity
 
-        # Log metrics
         entry = TrainingMetrics(
             step=global_step,
             epoch=epoch,
-            loss=loss.item(),
+            loss=loss_val,
             perplexity=perplexity,
             lr=scheduler.get_last_lr()[0],
             grad_norm=grad_norm,
@@ -742,28 +748,25 @@ def train_epoch(
             memory_mb=memory,
             tokens_per_sec=tokens_per_sec,
         ).to_dict()
-        # Attach FLOPs and per-layer grad norms to the history entry
         entry["cumulative_flops"] = cumulative_flops
         if layer_grad_norms:
             entry["layer_grad_norms"] = layer_grad_norms
         history.append(entry)
 
-        # Update progress bar
         if step % config.log_interval == 0:
             pbar.set_postfix(
                 {
-                    "loss": f"{loss.item():.4f}",
+                    "loss": f"{loss_val:.4f}",
                     "ppl": f"{perplexity:.2f}",
                     "lr": f"{scheduler.get_last_lr()[0]:.2e}",
                     "grad": f"{grad_norm:.4f}",
+                    "mem": f"{memory:.0f}MB",
                 }
             )
 
-        # Save checkpoint periodically
         if global_step % config.checkpoint_interval == 0:
             save_checkpoint(model, optimizer, scheduler, global_step, config)
 
-    # Epoch summary
     avg_loss = epoch_loss / config.steps_per_epoch
     avg_ppl = epoch_ppl / config.steps_per_epoch
     print(f"Epoch {epoch} Summary - Loss: {avg_loss:.4f}, PPL: {avg_ppl:.2f}")
@@ -1012,7 +1015,10 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
         "convergence_step": convergence_step,
         "train_history": list(train_history),
         "val_history": val_history,
-        "tokens_processed": global_step * config.batch_size * config.seq_len,
+        "tokens_processed": global_step
+        * config.batch_size
+        * config.grad_accum_steps
+        * config.seq_len,
         "total_epochs": config.epochs,
         # IsoFLOP tracking
         "total_flops": cumulative_flops,
@@ -1144,6 +1150,12 @@ def compare_models(
         **base_config,
     )
     attnres_results = train_model(attnres_config, verbose=True)
+
+    # Free GPU memory before training the second model.
+    # The attnres model object goes out of scope here; explicitly collect to
+    # ensure CUDA memory is returned before the standard model is allocated.
+    gc.collect()
+    torch.cuda.empty_cache()
 
     # Train Standard model with identical hyperparameters
     print("\n" + "-" * 70)
@@ -1696,6 +1708,9 @@ def run_scaling_experiment(
                 ).to_dict()
             )
 
+            gc.collect()
+            torch.cuda.empty_cache()
+
             # Train Standard (same total_steps → same tokens seen)
             print("Standard Transformer...")
             std_config = TrainingConfig(model="standard", **config)
@@ -2103,10 +2118,19 @@ Examples:
 
     # Training configuration
     parser.add_argument(
-        "--seq_len", type=int, default=512, help="Sequence length (default: 512)"
+        "--seq_len", type=int, default=256, help="Sequence length (default: 256)"
     )
     parser.add_argument(
-        "--batch_size", type=int, default=64, help="Batch size (default: 64)"
+        "--batch_size",
+        type=int,
+        default=32,
+        help="Micro-batch size per step (default: 32)",
+    )
+    parser.add_argument(
+        "--grad_accum_steps",
+        type=int,
+        default=2,
+        help="Gradient accumulation steps (default: 2, effective batch = batch_size × grad_accum_steps)",
     )
     parser.add_argument(
         "--epochs", type=int, default=20, help="Number of epochs (default: 20)"
@@ -2207,6 +2231,7 @@ def main():
         "block_size": args.block_size,
         "seq_len": args.seq_len,
         "batch_size": args.batch_size,
+        "grad_accum_steps": args.grad_accum_steps,
         "epochs": args.epochs,
         "steps_per_epoch": args.steps_per_epoch,
         "lr": args.lr,
