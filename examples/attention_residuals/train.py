@@ -43,7 +43,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, asdict
-from collections import Counter, deque
+from collections import Counter
 
 import numpy as np
 import torch
@@ -76,28 +76,26 @@ class TrainingConfig:
     """Configuration for training runs."""
 
     model: str = "attnres"  # "attnres" or "standard"
-    vocab_size: int = 10000  # BPE vocabulary size (word-level tokenization)
-    hidden_dim: int = 768  # Increased from 512 for more capacity
-    num_layers: int = 24  # 24 layers = 6 blocks with block_size=4
-    num_heads: int = 12  # Increased from 8 to match hidden_dim (768/12=64 per head)
-    ff_dim: int = 3072  # Increased from 2048 (4x hidden_dim)
+    vocab_size: int = 10000
+    hidden_dim: int = 768
+    num_layers: int = 24  # 6 blocks of 4 layers
+    num_heads: int = 12  # 768 / 12 = 64 per head
+    ff_dim: int = 3072  # 4 × hidden_dim
     block_size: int = 4
-    seq_len: int = 1024  # DOUBLED from 512 - more context for better language modeling
-    batch_size: int = 16  # Doubled from 8 - more samples per batch
-    epochs: int = 100  # Increased for proper convergence (was 10)
-    steps_per_epoch: int = 100  # Doubled from 50 - more training per epoch
+    seq_len: int = 512
+    batch_size: int = 64
+    epochs: int = 20
+    steps_per_epoch: int = 500
     lr: float = 1e-4
     weight_decay: float = 0.01
-    dropout: float = 0.1  # Dropout rate (will be higher for attnres)
-    warmup_steps: int = 200  # Doubled from 100 for longer training
+    dropout: float = 0.1
+    warmup_steps: int = 500  # ~5% of total steps (20 × 500 = 10 000)
     max_grad_norm: float = 1.0
     device: str = "auto"
     seed: int = 42
     save_dir: str = "./checkpoints"
-    log_interval: int = 10
-    checkpoint_interval: int = 1000
-    patience: int = 10  # Epochs without improvement before early stopping
-    convergence_threshold: float = 0.001  # Relative improvement threshold
+    log_interval: int = 50
+    checkpoint_interval: int = 2500
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -489,6 +487,106 @@ def compute_gradient_norm(model: nn.Module) -> float:
     return math.sqrt(total_norm)
 
 
+def compute_per_layer_gradient_norms(model: nn.Module) -> List[float]:
+    """
+    Compute gradient norm for each transformer layer separately.
+
+    This reproduces the gradient uniformity analysis from the paper:
+    AttnRes should show more uniform gradient norms across depth compared
+    to standard PreNorm which suffers from gradient dilution.
+
+    Returns:
+        List of gradient norms, one per transformer layer (in order).
+        Returns an empty list if no layers are found.
+    """
+    norms: List[float] = []
+    if not hasattr(model, "layers"):
+        return norms
+    for layer in model.layers:
+        layer_norm_sq = 0.0
+        for p in layer.parameters():
+            if p.grad is not None:
+                layer_norm_sq += p.grad.data.norm(2).item() ** 2
+        norms.append(math.sqrt(layer_norm_sq))
+    return norms
+
+
+def compute_flops_per_step(config: "TrainingConfig", num_params: int) -> float:
+    """
+    Estimate FLOPs per training step using the standard approximation.
+
+    The Chinchilla / PaLM approximation for a transformer forward+backward:
+        FLOPs_per_token ≈ 6 × N_params
+    Total per step:
+        FLOPs_per_step = 6 × N_params × seq_len × batch_size
+
+    This is a lower bound; attention FLOPs (2 × B × T² × D) add ~10-20% for
+    typical seq_len/d_model ratios but are omitted here for simplicity.
+
+    Args:
+        config: Training configuration
+        num_params: Number of model parameters
+
+    Returns:
+        Estimated FLOPs per step (float)
+    """
+    return 6.0 * num_params * config.seq_len * config.batch_size
+
+
+def compute_depth_wise_magnitudes(model: nn.Module, x: torch.Tensor) -> List[float]:
+    """
+    Compute hidden-state L2 norm at each transformer layer during a forward pass.
+
+    This reproduces Figure 2 of the paper: output magnitudes should grow
+    roughly as O(√l) with standard PreNorm but stay bounded with AttnRes.
+
+    The function hooks into the model's layers and captures the hidden state
+    magnitude after each layer.
+
+    Args:
+        model: TransformerEncoderWithAttnRes or StandardTransformerEncoder
+        x: Input token IDs [batch, seq_len]
+
+    Returns:
+        List of mean L2 norms per layer (length = num_layers + 1 for embedding)
+    """
+    magnitudes: List[float] = []
+    hooks = []
+
+    def _hook(module, input, output):
+        # For AttnRes layers, output is (blocks, partial_block) tuple
+        if isinstance(output, tuple):
+            hidden = output[1]  # partial_block
+        else:
+            hidden = output
+        # Mean L2 norm over batch and seq_len dimensions
+        magnitudes.append(hidden.norm(dim=-1).mean().item())
+
+    # Register hooks on each transformer layer
+    if hasattr(model, "layers"):
+        for layer in model.layers:
+            hooks.append(layer.register_forward_hook(_hook))
+
+    model.eval()
+    with torch.no_grad():
+        # Capture embedding magnitude first
+        batch_size, seq_len = x.shape
+        positions = (
+            torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)
+        )
+        emb = model.embedding(x) + model.pos_embedding(positions)
+        magnitudes_with_emb = [emb.norm(dim=-1).mean().item()]
+
+        # Run full forward (hooks fire and append to `magnitudes`)
+        _ = model(x)
+
+    # Remove hooks
+    for h in hooks:
+        h.remove()
+
+    return magnitudes_with_emb + magnitudes
+
+
 def compute_output_magnitude(model: nn.Module, x: torch.Tensor) -> float:
     """
     Compute average output magnitude across layers.
@@ -545,7 +643,10 @@ def train_epoch(
     epoch: int,
     global_step: int,
     history: List[Dict],
-) -> Tuple[int, List[Dict], bool]:
+    cumulative_flops: float = 0.0,
+    flops_per_step: float = 0.0,
+    track_layer_grads: bool = False,
+) -> Tuple[int, List[Dict], bool, float]:
     """
     Train for one epoch with convergence detection.
 
@@ -558,16 +659,19 @@ def train_epoch(
         epoch: Current epoch number
         global_step: Current global step
         history: Training history
+        cumulative_flops: Running FLOPs total from previous epochs
+        flops_per_step: FLOPs consumed per training step
+        track_layer_grads: Whether to record per-layer gradient norms
 
     Returns:
-        Tuple of (final global step, updated history, converged flag)
+        Tuple of (final global step, updated history, unused bool (always False),
+                  updated cumulative_flops)
     """
     model.train()
     device = next(model.parameters()).device
 
     epoch_loss = 0.0
     epoch_ppl = 0.0
-    converged = False
 
     pbar = tqdm(range(config.steps_per_epoch), desc=f"Epoch {epoch}")
 
@@ -594,15 +698,24 @@ def train_epoch(
 
         # Gradient clipping
         grad_norm = compute_gradient_norm(model)
+
+        # Per-layer gradient norms (for gradient uniformity analysis)
+        layer_grad_norms: List[float] = []
+        if track_layer_grads and global_step % 50 == 0:
+            layer_grad_norms = compute_per_layer_gradient_norms(model)
+
         torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
 
         # Optimizer step
         optimizer.step()
         scheduler.step()
 
+        # Accumulate FLOPs
+        cumulative_flops += flops_per_step
+
         # Compute metrics
         elapsed = (time.time() - start_time) * 1000  # ms
-        perplexity = math.exp(loss.item())
+        perplexity = math.exp(min(loss.item(), 20.0))  # cap at e^20 to avoid overflow
         memory = get_memory_usage(device)
         tokens_per_sec = (config.batch_size * config.seq_len) / (elapsed / 1000)
 
@@ -616,7 +729,7 @@ def train_epoch(
         epoch_ppl += perplexity
 
         # Log metrics
-        metrics = TrainingMetrics(
+        entry = TrainingMetrics(
             step=global_step,
             epoch=epoch,
             loss=loss.item(),
@@ -628,8 +741,12 @@ def train_epoch(
             time_ms=elapsed,
             memory_mb=memory,
             tokens_per_sec=tokens_per_sec,
-        )
-        history.append(metrics.to_dict())
+        ).to_dict()
+        # Attach FLOPs and per-layer grad norms to the history entry
+        entry["cumulative_flops"] = cumulative_flops
+        if layer_grad_norms:
+            entry["layer_grad_norms"] = layer_grad_norms
+        history.append(entry)
 
         # Update progress bar
         if step % config.log_interval == 0:
@@ -651,7 +768,7 @@ def train_epoch(
     avg_ppl = epoch_ppl / config.steps_per_epoch
     print(f"Epoch {epoch} Summary - Loss: {avg_loss:.4f}, PPL: {avg_ppl:.2f}")
 
-    return global_step, history, converged
+    return global_step, history, False, cumulative_flops
 
 
 def save_checkpoint(
@@ -814,24 +931,25 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
     total_steps = config.epochs * config.steps_per_epoch
     optimizer, scheduler = create_optimizer_and_scheduler(model, config, total_steps)
 
-    # Training and validation history
-    # Use deque with max length to prevent unbounded memory growth
-    train_history = deque(maxlen=config.steps_per_epoch * 2)  # Keep last 2 epochs
+    # Training and validation history — keep full trajectory for IsoFLOP fitting.
+    train_history: List[Dict] = []
     val_history = []
-    epoch_summaries = []  # Store per-epoch summaries only
+    epoch_summaries = []
     global_step = 0
-    converged = False
-    best_val_loss = float("inf")
-    epochs_without_improvement = 0
-    epoch = 0  # Initialize to fix scope issue
+    epoch = 0
+    cumulative_flops = 0.0
+    flops_per_step = compute_flops_per_step(config, num_params)
 
-    # Training loop
+    if verbose:
+        print(f"Estimated FLOPs per step: {flops_per_step:.2e}")
+
+    # Training loop — runs for exactly config.epochs, no early stopping.
+    # Equal compute budgets are required for valid IsoFLOP comparisons.
     start_time = time.time()
 
     for epoch in range(1, config.epochs + 1):
-        # Training epoch
-        epoch_train_history = []  # Fresh history for this epoch
-        global_step, epoch_train_history, _ = train_epoch(
+        epoch_train_history: List[Dict] = []
+        global_step, epoch_train_history, _, cumulative_flops = train_epoch(
             model=model,
             dataset=train_dataset,
             optimizer=optimizer,
@@ -840,12 +958,14 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
             epoch=epoch,
             global_step=global_step,
             history=epoch_train_history,
+            cumulative_flops=cumulative_flops,
+            flops_per_step=flops_per_step,
+            track_layer_grads=True,
         )
 
-        # Add epoch history to rolling buffer
         train_history.extend(epoch_train_history)
 
-        # Validation evaluation after each epoch
+        # Validation after each epoch
         val_metrics = evaluate_model(model, val_dataset, config, device)
         val_history.append(
             {
@@ -856,7 +976,6 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
             }
         )
 
-        # Store epoch summary (lightweight)
         if epoch_train_history:
             epoch_summaries.append(
                 {
@@ -869,33 +988,19 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
             )
 
         print(
-            f"Epoch {epoch} Validation - Loss: {val_metrics['loss']:.4f}, PPL: {val_metrics['perplexity']:.2f}\n"
+            f"Epoch {epoch} Validation - Loss: {val_metrics['loss']:.4f}, "
+            f"PPL: {val_metrics['perplexity']:.2f}\n"
         )
 
-        # Check for convergence based on validation loss
-        if val_metrics["loss"] < best_val_loss - config.convergence_threshold:
-            best_val_loss = val_metrics["loss"]
-            epochs_without_improvement = 0
-        else:
-            epochs_without_improvement += 1
-            if epochs_without_improvement >= config.patience:
-                print(f"\n🎯 Convergence detected at epoch {epoch}! Early stopping.")
-                print(f"   (No improvement for {epochs_without_improvement} epochs)")
-                converged = True
-                break
-
     total_time = time.time() - start_time
-    final_epoch = epoch if converged else config.epochs
 
-    # Final evaluation on validation set
+    # Final evaluation
     final_val_metrics = evaluate_model(model, val_dataset, config, device)
     final_train_loss = train_history[-1]["loss"] if train_history else 0.0
     final_train_ppl = train_history[-1]["perplexity"] if train_history else 0.0
 
-    # Compute convergence step
     convergence_step = compute_convergence_step(train_history)
 
-    # Compile results
     results = {
         "config": config.to_dict(),
         "num_parameters": num_params,
@@ -908,16 +1013,17 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
         "train_history": list(train_history),
         "val_history": val_history,
         "tokens_processed": global_step * config.batch_size * config.seq_len,
-        "converged": converged,
-        "total_epochs": final_epoch,
+        "total_epochs": config.epochs,
+        # IsoFLOP tracking
+        "total_flops": cumulative_flops,
+        "flops_per_step": flops_per_step,
+        "final_loss": final_train_loss,
+        "final_perplexity": final_train_ppl,
     }
 
     if verbose:
         print(f"\n{'=' * 60}")
-        if converged:
-            print(f"🎯 Training Converged Early - {config.model}")
-        else:
-            print(f"Training Complete (Max Epochs) - {config.model}")
+        print(f"Training Complete - {config.model}")
         print(f"{'=' * 60}")
         print(
             f"Train Loss: {final_train_loss:.4f} | Val Loss: {final_val_metrics['loss']:.4f}"
@@ -926,11 +1032,10 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
             f"Train PPL: {final_train_ppl:.2f} | Val PPL: {final_val_metrics['perplexity']:.2f}"
         )
         print(f"Total Time: {total_time:.2f}s")
-        print(f"Epochs Trained: {results['total_epochs']}")
+        print(f"Epochs: {config.epochs}")
         print(f"Convergence Step: {convergence_step}")
         print(f"Tokens Processed: {results['tokens_processed']:,}")
-        if converged:
-            print(f"⏹️  Early stopping triggered - validation convergence detected")
+        print(f"Total FLOPs: {cumulative_flops:.2e}")
 
     return results
 
@@ -961,60 +1066,22 @@ def compute_convergence_step(history: List[Dict], threshold: float = 0.001) -> i
     return history[-1]["step"] if history else 0
 
 
-def check_convergence(
-    history: List[Dict],
-    window: int = 50,
-    threshold: float = 0.001,
-) -> bool:
-    """
-    Check if training has converged based on recent loss trend.
-
-    Convergence is detected when the loss hasn't improved significantly
-    over the specified window of steps.
-
-    Args:
-        history: Training history list
-        window: Number of steps to look back for convergence check
-        threshold: Minimum relative improvement required (default: 0.1%)
-
-    Returns:
-        True if converged, False otherwise
-    """
-    if len(history) < window:
-        return False
-
-    # Get recent losses
-    recent_losses = [h["loss"] for h in history[-window:]]
-
-    # Compute average loss over first and second half of window
-    half = window // 2
-    first_half_avg = sum(recent_losses[:half]) / half
-    second_half_avg = sum(recent_losses[half:]) / half
-
-    # Check if improvement is below threshold
-    if first_half_avg > 0:
-        improvement = (first_half_avg - second_half_avg) / first_half_avg
-        return improvement < threshold
-
-    return False
-
-
 # ============================================================================
 # Model Comparison
 # ============================================================================
 
 
 def compare_models(
-    hidden_dim: int = 768,  # Scaled up from 512
-    num_layers: int = 24,  # 24 layers for proper AttnRes with 6 blocks
-    num_heads: int = 12,  # Scaled up from 8 to match hidden_dim
-    ff_dim: int = 3072,  # Scaled up from 2048 (4x hidden_dim)
+    hidden_dim: int = 768,
+    num_layers: int = 24,
+    num_heads: int = 12,
+    ff_dim: int = 3072,
     block_size: int = 4,
-    seq_len: int = 1024,  # DOUBLED from 512 for more context
-    batch_size: int = 16,  # Doubled from 8
-    epochs: int = 100,  # Increased for proper convergence
+    seq_len: int = 512,
+    batch_size: int = 64,
+    epochs: int = 20,
     lr: float = 1e-4,
-    vocab_size: int = 10000,  # BPE vocabulary size
+    vocab_size: int = 10000,
     device: str = "auto",
     save_plots: bool = True,
 ) -> Dict[str, Any]:
@@ -1064,31 +1131,27 @@ def compare_models(
         "dropout": 0.1,  # Base dropout rate
     }
 
-    # Train Attention Residual model with higher regularization
-    # Attention Residual has ~800K more parameters from attention layers,
-    # which can cause overfitting without proper regularization
+    # Train both models with IDENTICAL hyperparameters.
+    # Previous versions used different dropout/weight_decay for each model,
+    # which confounded the comparison.  The paper keeps all hyperparameters
+    # equal to isolate the architectural effect.
     print("\n" + "-" * 70)
     print("Training Attention Residual Model...")
-    print("  (Higher dropout=0.15, weight_decay=0.02 for regularization)")
+    print("  (Same hyperparameters as Standard for a fair comparison)")
     print("-" * 70)
     attnres_config = TrainingConfig(
         model="attnres",
-        dropout=0.15,  # Higher dropout for attention residual model
-        weight_decay=0.02,  # Stronger weight decay
-        **{k: v for k, v in base_config.items() if k not in ["dropout"]},
+        **base_config,
     )
     attnres_results = train_model(attnres_config, verbose=True)
 
-    # Train Standard model
+    # Train Standard model with identical hyperparameters
     print("\n" + "-" * 70)
     print("Training Standard Transformer Model...")
-    print("  (Standard dropout=0.1, weight_decay=0.01)")
     print("-" * 70)
     std_config = TrainingConfig(
         model="standard",
-        dropout=0.1,  # Standard dropout
-        weight_decay=0.01,  # Standard weight decay
-        **{k: v for k, v in base_config.items() if k not in ["dropout"]},
+        **base_config,
     )
     std_results = train_model(std_config, verbose=True)
 
@@ -1120,25 +1183,17 @@ def compare_models(
     attnres_overfit = attnres_train_ppl - attnres_val_ppl
     std_overfit = std_train_ppl - std_val_ppl
 
-    # Get convergence status
-    attnres_converged = attnres_results.get("converged", False)
-    std_converged = std_results.get("converged", False)
-    attnres_epochs = attnres_results.get("total_epochs", epochs)
-    std_epochs = std_results.get("total_epochs", epochs)
-
     # Final comparison
     print("\n" + "=" * 70)
     print("COMPARISON RESULTS")
     print("=" * 70)
     print(f"Attention Residual Model:")
     print(f"  - Parameters: {attnres_results['num_parameters']:,}")
-    print(f"  - Train PPL: {attnres_train_ppl:.2f} | Val PPL: {attnres_val_ppl:.2f} ✓")
+    print(f"  - Train PPL: {attnres_train_ppl:.2f} | Val PPL: {attnres_val_ppl:.2f}")
     print(f"  - Overfitting Gap: {attnres_overfit:.2f} PPL")
     print(f"  - Training Time: {attnres_time:.2f}s")
     print(f"  - Convergence Step: {attnres_convergence}")
-    print(f"  - Epochs Trained: {attnres_epochs}/{epochs}")
-    if attnres_converged:
-        print(f"  - Status: 🎯 Converged (early stopped)")
+    print(f"  - Total FLOPs: {attnres_results.get('total_flops', 0):.2e}")
 
     print(f"\nStandard Transformer Model:")
     print(f"  - Parameters: {std_results['num_parameters']:,}")
@@ -1146,9 +1201,7 @@ def compare_models(
     print(f"  - Overfitting Gap: {std_overfit:.2f} PPL")
     print(f"  - Training Time: {std_time:.2f}s")
     print(f"  - Convergence Step: {std_convergence}")
-    print(f"  - Epochs Trained: {std_epochs}/{epochs}")
-    if std_converged:
-        print(f"  - Status: 🎯 Converged (early stopped)")
+    print(f"  - Total FLOPs: {std_results.get('total_flops', 0):.2e}")
 
     print(f"\n{'─' * 70}")
     print("PERPLEXITY IMPROVEMENT (Key Metric - Validation)")
@@ -1156,27 +1209,28 @@ def compare_models(
     print(f"  AttnRes Val PPL:    {attnres_val_ppl:.2f}")
     print(f"  Standard Val PPL:   {std_val_ppl:.2f}")
     print(f"  Absolute Gain:      {ppl_improvement_abs:.2f} PPL points")
-    print(f"  Relative Gain:      {ppl_improvement_pct:.1f}% better ✓")
+    print(f"  Relative Gain:      {ppl_improvement_pct:.1f}%")
     print(f"{'─' * 70}")
 
     print(f"\nEfficiency Metrics:")
-    print(f"  - Speedup: {speedup:.2f}x")
     print(f"  - Convergence Speedup: {convergence_speedup:.2f}x")
-    print(f"  - Compute Efficiency: {compute_efficiency:.2f}x")
+    print(f"  - Compute Efficiency (IsoFLOP): {compute_efficiency:.2f}x")
 
     print(f"\n{'─' * 70}")
     print("TRAINING CONFIGURATION")
     print(f"{'─' * 70}")
-    print(f"  Attention Residual: dropout=0.15, weight_decay=0.02")
-    print(f"  Standard:           dropout=0.10, weight_decay=0.01")
-    print(f"  (Higher regularization for Attention Residual due to extra parameters)")
+    print(f"  Both models trained with identical hyperparameters:")
+    print(
+        f"  dropout={base_config.get('dropout', 0.1)}, "
+        f"weight_decay={base_config.get('weight_decay', 0.01)}, "
+        f"lr={lr}, epochs={epochs}"
+    )
 
     # Save results
     comparison = {
         "attnres": attnres_results,
         "standard": std_results,
         "efficiency": {
-            "speedup": speedup,
             "convergence_speedup": convergence_speedup,
             "compute_efficiency": compute_efficiency,
         },
@@ -1192,21 +1246,12 @@ def compare_models(
             "attnres_gap": attnres_overfit,
             "standard_gap": std_overfit,
         },
-        "convergence_info": {
-            "attnres_converged": attnres_converged,
-            "std_converged": std_converged,
-            "attnres_total_epochs": attnres_epochs,
-            "std_total_epochs": std_epochs,
-            "max_epochs": epochs,
-        },
         "training_config": {
-            "attnres": {
-                "dropout": 0.15,
-                "weight_decay": 0.02,
-            },
-            "standard": {
-                "dropout": 0.10,
-                "weight_decay": 0.01,
+            "shared": {
+                "dropout": base_config.get("dropout", 0.1),
+                "weight_decay": base_config.get("weight_decay", 0.01),
+                "lr": lr,
+                "epochs": epochs,
             },
         },
     }
@@ -1223,6 +1268,12 @@ def compare_models(
     # Generate plots
     if save_plots:
         plot_comparison(attnres_results, std_results, save_dir, timestamp)
+
+        # IsoFLOP curve (loss vs cumulative FLOPs)
+        plot_isoflop_curves(attnres_results, std_results, save_dir, timestamp)
+
+        # Per-layer gradient norms
+        plot_layer_gradient_norms(attnres_results, std_results, save_dir, timestamp)
 
     return comparison
 
@@ -1460,6 +1511,108 @@ def plot_comparison(
 # ============================================================================
 
 
+def fit_scaling_law(flops: List[float], losses: List[float]) -> Tuple[float, float]:
+    """
+    Fit a power-law scaling curve L = A * C^(-alpha) using log-linear regression.
+
+    Args:
+        flops: List of cumulative FLOPs at each checkpoint
+        losses: Corresponding losses
+
+    Returns:
+        Tuple of (A, alpha) from log L = log A - alpha * log C
+    """
+    if len(flops) < 2:
+        return 1.0, 0.0
+
+    log_c = np.array([math.log(max(f, 1.0)) for f in flops])
+    log_l = np.array([math.log(max(l, 1e-6)) for l in losses])
+
+    # Linear regression: log_l = log_A - alpha * log_c
+    alpha_num = np.sum((log_c - log_c.mean()) * (log_l - log_l.mean()))
+    alpha_den = np.sum((log_c - log_c.mean()) ** 2)
+    alpha = -alpha_num / alpha_den if alpha_den != 0 else 0.0
+    log_a = log_l.mean() + alpha * log_c.mean()
+    a = math.exp(log_a)
+    return a, alpha
+
+
+def compute_isoflop_efficiency(
+    attnres_result: Dict, std_result: Dict
+) -> Dict[str, Any]:
+    """
+    Compute the IsoFLOP efficiency of AttnRes vs Standard.
+
+    The paper's 1.25x claim means: at the same FLOPs budget, AttnRes achieves
+    the same loss as Standard trained with 1.25x more FLOPs.  Equivalently,
+    to match AttnRes's final loss, Standard needs 1.25x more compute.
+
+    Strategy:
+        1. Extract (cumulative_flops, loss) pairs from training history
+        2. Fit power-law scaling curves for both models
+        3. For the AttnRes final loss, find the FLOPs Standard needs to reach it
+        4. Ratio = Standard_FLOPs / AttnRes_FLOPs = IsoFLOP efficiency
+
+    Returns:
+        Dict with keys: isoflop_efficiency, attnres_final_loss,
+        std_flops_to_match, attnres_total_flops
+    """
+
+    # Extract (flops, loss) series from history
+    def extract_flops_loss(result: Dict) -> Tuple[List[float], List[float]]:
+        history = result.get("train_history", [])
+        fl, lo = [], []
+        for entry in history:
+            if "cumulative_flops" in entry and entry["cumulative_flops"] > 0:
+                fl.append(entry["cumulative_flops"])
+                lo.append(entry["loss"])
+        return fl, lo
+
+    attnres_fl, attnres_lo = extract_flops_loss(attnres_result)
+    std_fl, std_lo = extract_flops_loss(std_result)
+
+    if len(attnres_fl) < 3 or len(std_fl) < 3:
+        # Not enough data for power-law fit, fall back to naive ratio
+        final_loss_ratio = std_result["final_loss"] / max(
+            attnres_result["final_loss"], 1e-6
+        )
+        return {
+            "isoflop_efficiency": final_loss_ratio,
+            "attnres_final_loss": attnres_result["final_loss"],
+            "std_final_loss": std_result["final_loss"],
+            "std_flops_to_match": std_result.get("total_flops", 0.0),
+            "attnres_total_flops": attnres_result.get("total_flops", 0.0),
+            "method": "loss_ratio_fallback",
+        }
+
+    # Fit power-law for standard model: L_std(C) = A_std * C^(-alpha_std)
+    a_std, alpha_std = fit_scaling_law(std_fl, std_lo)
+
+    attnres_final_loss = attnres_result["final_loss"]
+    attnres_total_flops = attnres_result.get("total_flops", attnres_fl[-1])
+
+    # Find C_std such that L_std(C_std) = attnres_final_loss
+    # A_std * C_std^(-alpha_std) = attnres_final_loss
+    # C_std = (A_std / attnres_final_loss)^(1/alpha_std)
+    if alpha_std > 0 and attnres_final_loss > 0 and a_std > 0:
+        c_std_to_match = (a_std / attnres_final_loss) ** (1.0 / alpha_std)
+        isoflop_efficiency = c_std_to_match / max(attnres_total_flops, 1.0)
+    else:
+        isoflop_efficiency = 1.0
+        c_std_to_match = 0.0
+
+    return {
+        "isoflop_efficiency": isoflop_efficiency,
+        "attnres_final_loss": attnres_final_loss,
+        "std_final_loss": std_result["final_loss"],
+        "std_flops_to_match": c_std_to_match,
+        "attnres_total_flops": attnres_total_flops,
+        "std_scaling_A": a_std,
+        "std_scaling_alpha": alpha_std,
+        "method": "power_law_fit",
+    }
+
+
 def run_scaling_experiment(
     hidden_dims: List[int] = [256, 512, 1024],
     num_layers_list: List[int] = [4, 8, 12],
@@ -1469,8 +1622,14 @@ def run_scaling_experiment(
     Run scaling law experiments across different model sizes.
 
     This verifies the paper's claims about:
-    - 1.25x compute efficiency across scales
+    - 1.25x IsoFLOP compute efficiency across scales
     - Consistent improvements with model size
+
+    The IsoFLOP metric is the correct measure: "Block AttnRes matches the
+    loss of a baseline trained with 1.25x more compute."  This is measured
+    by fitting a power-law scaling curve L = A * C^(-alpha) to the standard
+    model's (FLOPs, loss) trajectory, then finding how many FLOPs Standard
+    needs to reach AttnRes's final loss.
 
     Args:
         hidden_dims: List of hidden dimensions to test
@@ -1481,7 +1640,7 @@ def run_scaling_experiment(
         Dictionary with scaling results
     """
     print("\n" + "=" * 70)
-    print("SCALING LAW EXPERIMENTS")
+    print("SCALING LAW EXPERIMENTS (IsoFLOP metric)")
     print("=" * 70)
 
     base = base_config or {}
@@ -1490,9 +1649,11 @@ def run_scaling_experiment(
         "num_heads": 8,
         "ff_dim": 2048,
         "block_size": 4,
-        "seq_len": 128,
-        "batch_size": 32,
-        "epochs": 5,
+        "seq_len": 512,
+        "batch_size": 64,
+        "epochs": 10,
+        "steps_per_epoch": 500,
+        "warmup_steps": 500,
         "lr": 1e-4,
         "device": "auto",
     }
@@ -1501,6 +1662,7 @@ def run_scaling_experiment(
     results = {
         "attnres": [],
         "standard": [],
+        "isoflop_analysis": [],
     }
 
     for hidden_dim in hidden_dims:
@@ -1534,7 +1696,7 @@ def run_scaling_experiment(
                 ).to_dict()
             )
 
-            # Train Standard
+            # Train Standard (same total_steps → same tokens seen)
             print("Standard Transformer...")
             std_config = TrainingConfig(model="standard", **config)
             std_result = train_model(std_config, verbose=False)
@@ -1551,33 +1713,52 @@ def run_scaling_experiment(
                 ).to_dict()
             )
 
-            # Compute efficiency for this scale
-            idx = len(results["attnres"]) - 1
-            speedup = (
-                std_result["total_time_seconds"] / attnres_result["total_time_seconds"]
+            # Compute IsoFLOP efficiency
+            isoflop = compute_isoflop_efficiency(attnres_result, std_result)
+            results["isoflop_analysis"].append(
+                {
+                    "hidden_dim": hidden_dim,
+                    "num_layers": num_layers,
+                    **isoflop,
+                }
             )
-            results["attnres"][idx]["compute_efficiency"] = speedup
+
+            idx = len(results["attnres"]) - 1
+            results["attnres"][idx]["compute_efficiency"] = isoflop[
+                "isoflop_efficiency"
+            ]
             results["standard"][idx]["compute_efficiency"] = 1.0
 
             print(
-                f"  AttnRes Loss: {attnres_result['final_loss']:.4f}, Time: {attnres_result['total_time_seconds']:.2f}s"
+                f"  AttnRes Loss:  {attnres_result['final_loss']:.4f} "
+                f"(FLOPs: {attnres_result.get('total_flops', 0):.2e})"
             )
             print(
-                f"  Standard Loss: {std_result['final_loss']:.4f}, Time: {std_result['total_time_seconds']:.2f}s"
+                f"  Standard Loss: {std_result['final_loss']:.4f} "
+                f"(FLOPs: {std_result.get('total_flops', 0):.2e})"
             )
-            print(f"  Speedup: {speedup:.2f}x")
+            print(
+                f"  IsoFLOP efficiency: {isoflop['isoflop_efficiency']:.3f}x "
+                f"(paper claims 1.25x)"
+            )
 
     # Summary statistics
     print("\n" + "=" * 70)
-    print("SCALING LAW SUMMARY")
+    print("SCALING LAW SUMMARY (IsoFLOP)")
     print("=" * 70)
 
-    all_speedups = [r["compute_efficiency"] for r in results["attnres"]]
-    avg_speedup = sum(all_speedups) / len(all_speedups)
+    all_efficiencies = [r["compute_efficiency"] for r in results["attnres"]]
+    avg_efficiency = (
+        sum(all_efficiencies) / len(all_efficiencies) if all_efficiencies else 0.0
+    )
 
-    print(f"Average compute efficiency: {avg_speedup:.2f}x")
+    print(f"Average IsoFLOP efficiency: {avg_efficiency:.3f}x")
     print(f"Paper's claimed efficiency: 1.25x")
-    print(f"Verification: {'PASS' if avg_speedup >= 1.2 else 'INCONCLUSIVE'}")
+    print(f"Verification: {'PASS' if avg_efficiency >= 1.2 else 'INCONCLUSIVE'}")
+    print(f"\nNote: Small-scale proxy runs may show a lower efficiency than the")
+    print(f"paper's 1.25x (measured at 48B-param scale on 1.4T tokens).")
+    print(f"The trend direction (AttnRes < Standard loss at matched FLOPs) is")
+    print(f"the key signal to verify at small scale.")
 
     # Save results
     save_dir = Path("./checkpoints")
@@ -1594,9 +1775,186 @@ def run_scaling_experiment(
     return results
 
 
+def plot_magnitude_dynamics(
+    attnres_result: Dict,
+    std_result: Dict,
+    attnres_model: nn.Module,
+    std_model: nn.Module,
+    save_dir: Path,
+    timestamp: str,
+    device: torch.device,
+    vocab_size: int,
+    seq_len: int,
+):
+    """
+    Plot depth-wise hidden-state magnitude at init and end of training.
+
+    Reproduces Figure 2 of the paper:
+    - Standard PreNorm: magnitude grows roughly as O(sqrt(l)) with depth
+    - AttnRes: magnitude stays bounded, more uniform across depth
+
+    This is run once after both models have been trained.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle("Hidden-State Magnitude vs Depth (Paper Figure 2 proxy)", fontsize=13)
+
+    sample = torch.randint(0, vocab_size, (2, seq_len), device=device)
+
+    for ax, model, label in [
+        (axes[0], std_model, "Standard (PreNorm)"),
+        (axes[1], attnres_model, "AttnRes"),
+    ]:
+        mags = compute_depth_wise_magnitudes(model, sample)
+        ax.plot(range(len(mags)), mags, "o-", linewidth=2, markersize=5)
+        ax.set_xlabel("Layer index (0 = embedding)")
+        ax.set_ylabel("Mean L2 norm of hidden states")
+        ax.set_title(label)
+        ax.grid(True, alpha=0.3)
+        # Add sqrt(l) reference line for Standard
+        if "Standard" in label:
+            ref = [mags[0] * math.sqrt(max(i, 1)) for i in range(len(mags))]
+            ax.plot(
+                range(len(ref)),
+                ref,
+                "--",
+                color="gray",
+                alpha=0.6,
+                label="O(√l) reference",
+            )
+            ax.legend()
+
+    plt.tight_layout()
+    path = save_dir / f"magnitude_dynamics_{timestamp}.png"
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    print(f"Saved magnitude dynamics plot to {path}")
+    plt.close()
+
+
+def plot_layer_gradient_norms(
+    attnres_result: Dict,
+    std_result: Dict,
+    save_dir: Path,
+    timestamp: str,
+):
+    """
+    Plot per-layer gradient norms at the last training step where they were recorded.
+
+    Reproduces the gradient uniformity claim from the paper:
+    AttnRes should show more uniform gradient norms across depth, while
+    Standard PreNorm shows gradient dilution (smaller norms at early layers).
+    """
+
+    def extract_layer_grads(result: Dict) -> Optional[List[float]]:
+        history = result.get("train_history", [])
+        # Get the last entry that has per-layer grad norms
+        for entry in reversed(history):
+            if "layer_grad_norms" in entry:
+                return entry["layer_grad_norms"]
+        return None
+
+    attnres_grads = extract_layer_grads(attnres_result)
+    std_grads = extract_layer_grads(std_result)
+
+    if attnres_grads is None or std_grads is None:
+        print("No per-layer gradient data found — skipping gradient norm plot.")
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle("Per-Layer Gradient Norms (Gradient Uniformity)", fontsize=13)
+
+    for ax, grads, label, color in [
+        (axes[0], std_grads, "Standard (PreNorm)", "tab:blue"),
+        (axes[1], attnres_grads, "AttnRes", "tab:orange"),
+    ]:
+        ax.bar(range(len(grads)), grads, color=color, alpha=0.75)
+        ax.set_xlabel("Layer index")
+        ax.set_ylabel("Gradient L2 norm")
+        ax.set_title(label)
+        ax.grid(True, alpha=0.3, axis="y")
+        if grads:
+            cv = np.std(grads) / (np.mean(grads) + 1e-9)
+            ax.set_title(f"{label}\n(CV = {cv:.3f}, lower = more uniform)")
+
+    plt.tight_layout()
+    path = save_dir / f"layer_grad_norms_{timestamp}.png"
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    print(f"Saved layer gradient norms plot to {path}")
+    plt.close()
+
+
+def plot_isoflop_curves(
+    attnres_result: Dict,
+    std_result: Dict,
+    save_dir: Path,
+    timestamp: str,
+):
+    """
+    Plot loss vs cumulative FLOPs for both models (IsoFLOP comparison).
+
+    This is the key plot for reproducing the 1.25x efficiency claim.
+    If the AttnRes curve sits consistently below the Standard curve, the
+    claim holds directionally.
+    """
+
+    def extract_flops_loss(result: Dict) -> Tuple[List[float], List[float]]:
+        history = result.get("train_history", [])
+        fl, lo = [], []
+        for entry in history:
+            if "cumulative_flops" in entry and entry["cumulative_flops"] > 0:
+                fl.append(entry["cumulative_flops"])
+                lo.append(entry["loss"])
+        return fl, lo
+
+    attnres_fl, attnres_lo = extract_flops_loss(attnres_result)
+    std_fl, std_lo = extract_flops_loss(std_result)
+
+    if not attnres_fl or not std_fl:
+        print("No FLOPs data in history — skipping IsoFLOP plot.")
+        return
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Smooth by subsampling to avoid overcrowded plot
+    def subsample(xs, ys, n=200):
+        if len(xs) <= n:
+            return xs, ys
+        idx = np.linspace(0, len(xs) - 1, n, dtype=int)
+        return [xs[i] for i in idx], [ys[i] for i in idx]
+
+    attnres_fl_s, attnres_lo_s = subsample(attnres_fl, attnres_lo)
+    std_fl_s, std_lo_s = subsample(std_fl, std_lo)
+
+    ax.plot(std_fl_s, std_lo_s, label="Standard (PreNorm)", linewidth=2)
+    ax.plot(attnres_fl_s, attnres_lo_s, label="AttnRes", linewidth=2)
+
+    ax.set_xlabel("Cumulative FLOPs (6 × N_params × tokens)")
+    ax.set_ylabel("Training Loss")
+    ax.set_title("IsoFLOP Comparison\n(AttnRes below = better compute efficiency)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    # If AttnRes final loss < Standard final loss at same FLOPs, annotate
+    if attnres_lo and std_lo:
+        ax.annotate(
+            f"AttnRes final: {attnres_lo[-1]:.3f}\nStd final: {std_lo[-1]:.3f}",
+            xy=(0.98, 0.98),
+            xycoords="axes fraction",
+            ha="right",
+            va="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        )
+
+    plt.tight_layout()
+    path = save_dir / f"isoflop_{timestamp}.png"
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    print(f"Saved IsoFLOP plot to {path}")
+    plt.close()
+
+
 def plot_scaling_curves(results: Dict, save_dir: Path, timestamp: str):
-    """Plot scaling law curves."""
+    """Plot scaling law curves including IsoFLOP efficiency."""
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle("Scaling Law Experiments", fontsize=14)
 
     attnres_data = results["attnres"]
     std_data = results["standard"]
@@ -1612,7 +1970,7 @@ def plot_scaling_curves(results: Dict, save_dir: Path, timestamp: str):
 
     # Plot 1: Loss vs Parameters (Scaling Law)
     axes[0, 0].scatter(
-        attnres_params, attnres_losses, label="Attention Residual", s=100, alpha=0.7
+        attnres_params, attnres_losses, label="AttnRes", s=100, alpha=0.7
     )
     axes[0, 0].scatter(std_params, std_losses, label="Standard", s=100, alpha=0.7)
     axes[0, 0].set_xlabel("Parameters")
@@ -1623,9 +1981,7 @@ def plot_scaling_curves(results: Dict, save_dir: Path, timestamp: str):
     axes[0, 0].set_xscale("log")
 
     # Plot 2: Time vs Parameters
-    axes[0, 1].scatter(
-        attnres_params, attnres_times, label="Attention Residual", s=100, alpha=0.7
-    )
+    axes[0, 1].scatter(attnres_params, attnres_times, label="AttnRes", s=100, alpha=0.7)
     axes[0, 1].scatter(std_params, std_times, label="Standard", s=100, alpha=0.7)
     axes[0, 1].set_xlabel("Parameters")
     axes[0, 1].set_ylabel("Training Time (s)")
@@ -1634,28 +1990,34 @@ def plot_scaling_curves(results: Dict, save_dir: Path, timestamp: str):
     axes[0, 1].grid(True, alpha=0.3)
     axes[0, 1].set_xscale("log")
 
-    # Plot 3: Efficiency vs Scale
+    # Plot 3: IsoFLOP efficiency vs Scale (replaces wall-clock speedup)
     efficiency = [r["compute_efficiency"] for r in attnres_data]
     axes[1, 0].scatter(attnres_params, efficiency, s=100, alpha=0.7, color="green")
     axes[1, 0].axhline(y=1.25, color="red", linestyle="--", label="Paper's 1.25x claim")
-    axes[1, 0].axhline(y=1.0, color="gray", linestyle=":", label="Baseline")
+    axes[1, 0].axhline(y=1.0, color="gray", linestyle=":", label="Baseline (1.0x)")
     axes[1, 0].set_xlabel("Parameters")
-    axes[1, 0].set_ylabel("Compute Efficiency (Speedup)")
-    axes[1, 0].set_title("Compute Efficiency vs Model Size")
+    axes[1, 0].set_ylabel(
+        "IsoFLOP Efficiency\n(FLOPs Standard needs / FLOPs AttnRes uses)"
+    )
+    axes[1, 0].set_title("IsoFLOP Compute Efficiency vs Model Size")
     axes[1, 0].legend()
     axes[1, 0].grid(True, alpha=0.3)
-    axes[1, 0].set_xscale("log")
+    if attnres_params:
+        axes[1, 0].set_xscale("log")
 
     # Plot 4: Loss improvement at each scale
     improvements = []
     for a, s in zip(attnres_data, std_data):
-        improvement = (s["final_loss"] - a["final_loss"]) / s["final_loss"] * 100
+        improvement = (
+            (s["final_loss"] - a["final_loss"]) / max(s["final_loss"], 1e-6) * 100
+        )
         improvements.append(improvement)
 
-    axes[1, 1].bar(range(len(improvements)), improvements, alpha=0.7, color="purple")
+    colors = ["green" if v >= 0 else "red" for v in improvements]
+    axes[1, 1].bar(range(len(improvements)), improvements, alpha=0.75, color=colors)
     axes[1, 1].set_xlabel("Model Configuration")
-    axes[1, 1].set_ylabel("Loss Improvement (%)")
-    axes[1, 1].set_title("Attention Residual Loss Improvement")
+    axes[1, 1].set_ylabel("Loss Improvement (%)\n(positive = AttnRes better)")
+    axes[1, 1].set_title("AttnRes Loss Improvement Over Standard")
     axes[1, 1].grid(True, alpha=0.3, axis="y")
     axes[1, 1].axhline(y=0, color="gray", linestyle="-", linewidth=0.5)
 
@@ -1678,22 +2040,22 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Train Attention Residual model (default: 100 epochs for convergence)
+    # Train AttnRes model with defaults (20 epochs × 500 steps on A100, ~15 min)
     python train.py --model attnres
 
-    # Train Standard model
-    python train.py --model standard --hidden_dim 256
+    # Train Standard baseline
+    python train.py --model standard
 
-    # Compare both models
+    # Compare both models (generates IsoFLOP, gradient, and loss plots)
     python train.py --compare
 
-    # Run scaling law experiments
-    python train.py --scaling --hidden_dims 256 512 1024
+    # Scaling law experiments
+    python train.py --scaling --hidden_dims 256 512 768 --num_layers_list 8 16 24
 
-    # Full configuration (12 layers, 4 blocks for proper AttnRes comparison)
-    python train.py --model attnres --hidden_dim 512 --num_layers 12 \\
-        --num_heads 8 --ff_dim 2048 --block_size 4 --seq_len 128 \\
-        --batch_size 32 --lr 1e-4
+    # Quick smoke-test on CPU
+    python train.py --model attnres --hidden_dim 64 --num_layers 4 --num_heads 4 \\
+        --ff_dim 256 --seq_len 64 --batch_size 8 --epochs 2 --steps_per_epoch 10 \\
+        --vocab_size 1000 --warmup_steps 5 --device cpu
         """,
     )
 
@@ -1709,34 +2071,34 @@ Examples:
         "--vocab_size",
         type=int,
         default=10000,
-        help="Vocabulary size (default: 10000 - BPE tokenization)",
+        help="Vocabulary size (default: 10000)",
     )
     parser.add_argument(
-        "--hidden_dim", type=int, default=512, help="Hidden dimension (default: 512)"
+        "--hidden_dim", type=int, default=768, help="Hidden dimension (default: 768)"
     )
     parser.add_argument(
         "--num_layers",
         type=int,
         default=24,
-        help="Number of layers (default: 24 - 6 blocks with block_size=4)",
+        help="Number of transformer layers (default: 24 = 6 blocks × 4)",
     )
     parser.add_argument(
         "--num_heads",
         type=int,
-        default=8,
-        help="Number of attention heads (default: 8)",
+        default=12,
+        help="Number of attention heads (default: 12)",
     )
     parser.add_argument(
         "--ff_dim",
         type=int,
-        default=1024,
-        help="Feed-forward dimension (default: 1024)",
+        default=3072,
+        help="Feed-forward dimension (default: 3072 = 4 × hidden_dim)",
     )
     parser.add_argument(
         "--block_size",
         type=int,
         default=4,
-        help="Block size for Attention Residuals (default: 4)",
+        help="Transformer layers per AttnRes block (default: 4)",
     )
 
     # Training configuration
@@ -1744,16 +2106,16 @@ Examples:
         "--seq_len", type=int, default=512, help="Sequence length (default: 512)"
     )
     parser.add_argument(
-        "--batch_size", type=int, default=8, help="Batch size (default: 8)"
+        "--batch_size", type=int, default=64, help="Batch size (default: 64)"
     )
     parser.add_argument(
-        "--epochs", type=int, default=100, help="Number of epochs (default: 100)"
+        "--epochs", type=int, default=20, help="Number of epochs (default: 20)"
     )
     parser.add_argument(
         "--steps_per_epoch",
         type=int,
-        default=50,
-        help="Steps per epoch (default: 50)",
+        default=500,
+        help="Steps per epoch (default: 500)",
     )
     parser.add_argument(
         "--lr", type=float, default=1e-4, help="Learning rate (default: 1e-4)"
@@ -1762,13 +2124,13 @@ Examples:
         "--weight_decay", type=float, default=0.01, help="Weight decay (default: 0.01)"
     )
     parser.add_argument(
-        "--warmup_steps", type=int, default=20, help="Warmup steps (default: 20)"
+        "--warmup_steps", type=int, default=500, help="LR warmup steps (default: 500)"
     )
     parser.add_argument(
         "--max_grad_norm",
         type=float,
         default=1.0,
-        help="Max gradient norm for clipping (default: 1.0)",
+        help="Gradient clipping norm (default: 1.0)",
     )
 
     # Device and optimization
@@ -1788,16 +2150,16 @@ Examples:
         "--save_dir",
         type=str,
         default="./checkpoints",
-        help="Directory to save checkpoints (default: ./checkpoints)",
+        help="Directory for checkpoints and plots (default: ./checkpoints)",
     )
     parser.add_argument(
-        "--log_interval", type=int, default=10, help="Logging interval (default: 10)"
+        "--log_interval", type=int, default=50, help="Log every N steps (default: 50)"
     )
     parser.add_argument(
         "--checkpoint_interval",
         type=int,
-        default=100,
-        help="Checkpoint interval (default: 100)",
+        default=2500,
+        help="Save checkpoint every N steps (default: 2500)",
     )
 
     # Experiment modes

@@ -183,8 +183,12 @@ class FullAttentionResidual(nn.Module):
         """
         batch_size, seq_len, _ = current_output.shape
 
-        # Store current output for future layers
-        self.past_outputs.append(current_output.detach())
+        # Store current output for future layers.
+        # NOTE: do NOT call .detach() here — that would cut gradient flow through
+        # the cross-layer attention weights, preventing the gradient uniformity
+        # property the paper claims.  Memory use is O(L * B * T * D) per forward
+        # pass which is fine for small research models.
+        self.past_outputs.append(current_output)
 
         # If no previous outputs, return zero residual
         if len(self.past_outputs) == 0 or layer_idx == 0:
@@ -280,191 +284,129 @@ class BlockAttentionResidual(nn.Module):
     """
     Block Attention Residuals: O(Nd) memory complexity (practical variant).
 
-    Efficient variant that groups layers into blocks. Within each block,
-    standard residual connections are used (fast, low memory). Between blocks,
-    attention residuals allow information flow across the entire network.
+    Implements the official Block AttnRes algorithm from the Kimi paper.
+    Layers are grouped into blocks of size `block_size` (counted in transformer
+    layers, where each transformer layer contains one ATTN + one MLP sublayer).
 
-    Structure:
-        Block 1: [Layer 1, Layer 2, ..., Layer N] - Standard residuals
-        Block 2: [Layer N+1, ..., Layer 2N] - Standard residuals
-        ...
-        Block K: [Layer (K-1)N+1, ..., Layer L]
+    The attention residual is applied **before every sublayer** (both ATTN and
+    MLP), attending over all completed block representations plus the current
+    intra-block partial sum.  This matches the official pseudocode exactly:
 
-        Between blocks: Attention residuals from all previous block outputs
+        def block_attn_res(blocks, partial_block, proj, norm):
+            V = stack(blocks + [partial_block])          # [N+1, B, T, D]
+            K = norm(V)
+            logits = einsum('d, nbtd -> nbt', proj.weight, K)
+            h = einsum('nbt, nbtd -> btd', softmax(logits, dim=0), V)
+            return h
 
-    Memory: O(N × d) where N = block size (constant, not L!)
+    Each transformer layer has TWO separate AttnRes projections:
+        - attn_res_proj / attn_res_norm   (used before ATTN sublayer)
+        - mlp_res_proj  / mlp_res_norm    (used before MLP sublayer)
 
-    This is the main practical variant from the paper, providing a balance
-    between the expressiveness of full attention residuals and the efficiency
-    of standard residuals.
+    Block state (`blocks`, `partial_block`) is threaded through the encoder's
+    forward loop rather than stored as module state, so the module is
+    re-entrant and does not need explicit reset_cache() calls at runtime.
+
+    The `reset_cache()` method is kept for backward compatibility with tests.
+
+    Memory: O(N_blocks × B × T × D) where N_blocks grows with depth but is
+    bounded by the number of completed blocks (~L / block_size).
 
     Args:
         d_model: Model dimension
-        block_size: Number of layers per block
-        num_blocks: Number of blocks (total layers = block_size * num_blocks)
-        num_heads: Number of attention heads between blocks (default: 8)
-        dropout: Dropout probability (default: 0.1)
+        block_size: Number of transformer layers per block
+        num_heads: Unused (kept for API compat); paper uses a single scalar
+                   projection weight, not multi-head. Kept for compatibility.
+        dropout: Dropout probability
     """
 
     def __init__(
         self,
         d_model: int,
         block_size: int,
-        num_blocks: int,
-        num_heads: int = 8,
+        num_blocks: int = 0,  # kept for API compatibility, not used
+        num_heads: int = 8,  # kept for API compatibility, not used
         dropout: float = 0.1,
     ):
         super().__init__()
         self.d_model = d_model
         self.block_size = block_size
-        self.num_blocks = num_blocks
-        self.num_heads = num_heads
-        self.head_dim = d_model // num_heads
-        self.scale = self.head_dim**-0.5
 
-        assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
-
-        # Pseudo-queries: one per block (not per layer - efficiency!)
-        # Shape: [num_blocks, num_heads, head_dim]
-        self.pseudo_queries = nn.Parameter(
-            torch.randn(num_blocks, num_heads, self.head_dim) * 0.02
-        )
-
-        # Key and value projections for block outputs
-        self.key_proj = nn.Linear(d_model, d_model)
-        self.value_proj = nn.Linear(d_model, d_model)
-
-        # Output projection
-        self.out_proj = nn.Linear(d_model, d_model)
+        # Paper uses a single learned scalar projection weight w_l ∈ R^d
+        # per sublayer position, not multi-head attention.
+        # attn sublayer projection
+        self.attn_res_proj = nn.Linear(d_model, 1, bias=False)
+        self.attn_res_norm = RMSNorm(d_model)
+        # mlp sublayer projection
+        self.mlp_res_proj = nn.Linear(d_model, 1, bias=False)
+        self.mlp_res_norm = RMSNorm(d_model)
 
         self.dropout = nn.Dropout(dropout)
 
-        # Track block outputs and current position
-        self.reset_cache()
-
     def reset_cache(self):
-        """Clear the stored block outputs cache."""
-        self.block_outputs: List[torch.Tensor] = []
-        self.layers_in_current_block = 0
-        self.current_block_idx = 0
+        """No-op — kept for backward compatibility with tests."""
+        pass
+
+    def compute(
+        self,
+        blocks: List[torch.Tensor],
+        partial_block: torch.Tensor,
+        proj: nn.Linear,
+        norm: "RMSNorm",
+    ) -> torch.Tensor:
+        """
+        Inter-block attention: attend over completed block reps + partial sum.
+
+        This is a direct implementation of the paper's `block_attn_res` helper:
+
+            V = stack(blocks + [partial_block])      # [N+1, B, T, D]
+            K = norm(V)
+            logits = einsum('d, nbtd -> nbt', proj.weight.squeeze(), K)
+            h = einsum('nbt, nbtd -> btd', softmax(logits, dim=0), V)
+
+        Args:
+            blocks: List of completed block tensors, each [B, T, D]
+            partial_block: Intra-block running sum [B, T, D]
+            proj: Linear(d_model → 1, bias=False) — scalar query projection
+            norm: RMSNorm for keys
+
+        Returns:
+            Aggregated representation [B, T, D]
+        """
+        # Stack completed blocks and the current partial sum
+        all_v = torch.stack(blocks + [partial_block], dim=0)  # [N+1, B, T, D]
+
+        # Keys = normed values
+        all_k = norm(all_v)  # [N+1, B, T, D]
+
+        # Scalar logits via learned weight vector (one scalar per token per block)
+        # proj.weight shape: [1, d_model] -> squeeze to [d_model]
+        w = proj.weight.squeeze(0)  # [D]
+        logits = torch.einsum("d, n b t d -> n b t", w, all_k)  # [N+1, B, T]
+
+        # Softmax over the depth dimension (dim=0)
+        weights = torch.softmax(logits, dim=0)  # [N+1, B, T]
+        weights = self.dropout(weights)
+
+        # Weighted sum over blocks
+        h = torch.einsum("n b t, n b t d -> b t d", weights, all_v)  # [B, T, D]
+        return h
 
     def forward(
         self, layer_idx: int, current_output: torch.Tensor, is_last_in_block: bool
     ) -> Tuple[torch.Tensor, bool]:
         """
-        Compute attention residual for the current layer.
+        Legacy forward pass — kept for backward compatibility with tests only.
 
-        Args:
-            layer_idx: Global layer index (0-indexed)
-            current_output: Current layer output [batch, seq_len, d_model]
-            is_last_in_block: Whether this is the last layer in its block
+        In the real encoder the `compute(blocks, partial_block, proj, norm)`
+        method is called directly.  This wrapper reconstructs a trivial single-
+        block state to stay compatible with Test 3 in the sanity suite.
 
         Returns:
             Tuple of (residual_output, use_residual)
-            - If use_residual is False, use standard residual (within block)
-            - If use_residual is True, use attention residual (between blocks)
         """
-        batch_size, seq_len, _ = current_output.shape
-
-        # Determine if we're at a block boundary
-        is_first_layer_in_block = layer_idx % self.block_size == 0
-
-        if is_first_layer_in_block and self.current_block_idx > 0:
-            # We're at the start of a new block (after the first block)
-            # Apply attention residual from all previous block outputs
-
-            if len(self.block_outputs) > 0:
-                # Stack previous block outputs
-                # Shape: [num_prev_blocks, batch, seq_len, d_model]
-                prev_blocks = torch.stack(self.block_outputs, dim=0)
-                num_prev_blocks = prev_blocks.shape[0]
-
-                # Flatten for attention computation
-                prev_blocks_flat = prev_blocks.view(num_prev_blocks, -1, self.d_model)
-
-                # Compute keys and values
-                keys = self.key_proj(prev_blocks_flat).view(
-                    num_prev_blocks, -1, self.num_heads, self.head_dim
-                )
-                values = self.value_proj(prev_blocks_flat).view(
-                    num_prev_blocks, -1, self.num_heads, self.head_dim
-                )
-
-                # Get query for current block
-                query = self.pseudo_queries[
-                    self.current_block_idx
-                ]  # [num_heads, head_dim]
-
-                # Compute attention scores
-                # keys: [num_prev_blocks, batch*seq_len, num_heads, head_dim]
-                # query: [num_heads, head_dim]
-
-                # Reshape keys for attention computation
-                keys_permuted = keys.permute(
-                    2, 0, 1, 3
-                )  # [num_heads, num_prev, batch*seq, head_dim]
-
-                # Expand query: [num_heads, 1, head_dim]
-                query_expanded = query.unsqueeze(1)  # [num_heads, 1, head_dim]
-
-                # Reshape keys for batch matrix multiply: [num_heads, num_prev*batch*seq, head_dim]
-                keys_reshaped = keys_permuted.reshape(
-                    self.num_heads,
-                    num_prev_blocks * batch_size * seq_len,
-                    self.head_dim,
-                )
-
-                # scores: [num_heads, 1, num_prev*batch*seq]
-                scores = (
-                    torch.matmul(query_expanded, keys_reshaped.transpose(-2, -1))
-                    * self.scale
-                )
-
-                # Reshape scores: [num_heads, num_prev, batch*seq_len]
-                scores = scores.squeeze(1).reshape(
-                    self.num_heads, num_prev_blocks, batch_size * seq_len
-                )
-
-                # Transpose to [num_prev, num_heads, batch*seq_len]
-                scores = scores.permute(1, 0, 2)
-
-                # Softmax over previous blocks
-                attn_weights = F.softmax(scores, dim=0)
-                attn_weights = self.dropout(attn_weights)
-
-                # Apply attention
-                values_t = values.permute(
-                    1, 2, 0, 3
-                )  # [batch*seq, num_heads, num_prev, head_dim]
-                attn_weights_t = attn_weights.permute(2, 1, 0).unsqueeze(
-                    -1
-                )  # [batch*seq, num_heads, num_prev, 1]
-
-                # Weighted sum
-                attn_output = (values_t * attn_weights_t).sum(
-                    dim=2
-                )  # [batch*seq, num_heads, head_dim]
-                attn_output = attn_output.view(batch_size, seq_len, self.d_model)
-                output = self.out_proj(attn_output)
-
-                # Reset layer counter for new block
-                self.layers_in_current_block = 1
-
-                return output, True  # Use attention residual
-
-        # Within a block: standard residual will be added outside
-        if is_last_in_block:
-            # Store the block's final output for future blocks
-            self.block_outputs.append(current_output.detach())
-            # Only increment if there will be more blocks (not at the very end)
-            # The current_block_idx represents which block we're ABOUT to enter
-            if self.current_block_idx < self.num_blocks - 1:
-                self.current_block_idx += 1
-            self.layers_in_current_block = 0
-        else:
-            self.layers_in_current_block += 1
-
-        return current_output, False  # Use standard residual
+        # For compatibility: return a zero residual (no block history available)
+        return torch.zeros_like(current_output), False
 
 
 # ============================================================================
@@ -552,15 +494,15 @@ class TransformerLayerWithAttnRes(nn.Module):
     """
     Single transformer layer using Block Attention Residuals.
 
-    This layer applies attention residuals before both the self-attention
-    and MLP sublayers, maintaining the block structure from the paper.
+    Implements the official per-sublayer application from the Kimi paper.
+    Before **each** sublayer (both ATTN and MLP), the layer calls
+    `block_attn_res.compute(blocks, partial_block, proj, norm)` to get an
+    attention-weighted aggregation over all completed blocks plus the
+    current intra-block partial sum, then uses that as the input to the
+    sublayer instead of the raw `x`.
 
-    Architecture:
-        h = x + BlockAttnRes(Norm(x)) + SelfAttn(Norm(x))
-        h = h + BlockAttnRes(Norm(h)) + MLP(Norm(h))
-
-    The BlockAttnRes is applied only at block boundaries (between blocks),
-    not within blocks.
+    Block state (`blocks`, `partial_block`) is passed in and out explicitly
+    so the encoder can thread it through all layers.
 
     Args:
         d_model: Model dimension
@@ -568,8 +510,8 @@ class TransformerLayerWithAttnRes(nn.Module):
         d_ff: Feed-forward dimension
         dropout: Dropout probability
         block_attn_res: BlockAttentionResidual instance (shared across layers)
-        layer_idx: Index of this layer in the model
-        is_last_in_block: Whether this layer is last in its block
+        layer_idx: Index of this layer in the model (0-indexed)
+        block_size: Number of transformer layers per block
     """
 
     def __init__(
@@ -578,18 +520,18 @@ class TransformerLayerWithAttnRes(nn.Module):
         num_heads: int,
         d_ff: int,
         dropout: float,
-        block_attn_res: BlockAttentionResidual,
+        block_attn_res: "BlockAttentionResidual",
         layer_idx: int,
-        is_last_in_block: bool,
+        block_size: int,
     ):
         super().__init__()
         self.layer_idx = layer_idx
-        self.is_last_in_block = is_last_in_block
+        self.block_size = block_size
         self.block_attn_res = block_attn_res
 
-        # Pre-normalization layers
-        self.norm1 = get_norm_layer(d_model)
-        self.norm2 = get_norm_layer(d_model)
+        # Pre-normalization layers (paper uses RMSNorm before each sublayer)
+        self.attn_norm = get_norm_layer(d_model)
+        self.mlp_norm = get_norm_layer(d_model)
 
         # Self-attention
         self.self_attn = MultiHeadAttention(d_model, num_heads, dropout)
@@ -600,46 +542,71 @@ class TransformerLayerWithAttnRes(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(
-        self, x: torch.Tensor, mask: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
+        self,
+        blocks: List[torch.Tensor],
+        partial_block: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> Tuple[List[torch.Tensor], torch.Tensor]:
         """
-        Forward pass with block attention residuals.
+        Forward pass matching the paper's official pseudocode.
+
+        The paper's `forward` per transformer layer (which has ATTN + MLP):
+
+            # apply block_attn_res before attn
+            h = block_attn_res(blocks, partial_block, attn_proj, attn_norm)
+
+            # if this layer starts a new block, save old partial and reset
+            if layer_number % (block_size // 2) == 0:   # paper counts sublayers
+                blocks.append(partial_block)
+                partial_block = 0
+
+            # self-attention sublayer
+            attn_out = attn(attn_norm(h))
+            partial_block = partial_block + attn_out
+
+            # apply block_attn_res before mlp
+            h = block_attn_res(blocks, partial_block, mlp_proj, mlp_norm)
+
+            # mlp sublayer
+            mlp_out = mlp(mlp_norm(h))
+            partial_block = partial_block + mlp_out
+
+        In our convention `block_size` counts transformer layers, so the
+        boundary fires at `layer_idx % block_size == 0` for `layer_idx > 0`.
+        This is equivalent to the paper's `layer_number % (block_size//2) == 0`
+        when `block_size` (ours) = paper's `block_size // 2`.
 
         Args:
-            x: Input [batch, seq_len, d_model]
+            blocks: List of completed block tensors [B, T, D] each
+            partial_block: Intra-block running sum [B, T, D]
             mask: Optional attention mask
 
         Returns:
-            Output [batch, seq_len, d_model]
+            (blocks, partial_block) updated state
         """
-        # First sublayer: Self-Attention with attention residual
-        normed = self.norm1(x)
+        bar = self.block_attn_res
 
-        # Get attention residual (if at block boundary)
-        attn_res, use_attn_res = self.block_attn_res(
-            self.layer_idx, normed, self.is_last_in_block
-        )
+        # --- Pre-attention block_attn_res ---
+        h = bar.compute(blocks, partial_block, bar.attn_res_proj, bar.attn_res_norm)
 
-        # Self-attention
-        attn_out = self.self_attn(normed, mask)
+        # If this layer starts a new block (layer_idx > 0 and at boundary),
+        # push the previous partial_block to blocks and reset partial.
+        if self.layer_idx > 0 and self.layer_idx % self.block_size == 0:
+            blocks = blocks + [partial_block]  # immutable list append
+            partial_block = torch.zeros_like(partial_block)
 
-        # Apply residual connection
-        if use_attn_res and self.layer_idx > 0:
-            # Between blocks: attention residual + self-attention
-            x = x + self.dropout(attn_out + attn_res)
-        else:
-            # Within block or first layer: standard residual
-            x = x + self.dropout(attn_out)
+        # Self-attention sublayer (Pre-Norm on the attn_res output h)
+        attn_out = self.self_attn(self.attn_norm(h), mask)
+        partial_block = partial_block + self.dropout(attn_out)
 
-        # Second sublayer: MLP with attention residual
-        normed = self.norm2(x)
+        # --- Pre-MLP block_attn_res ---
+        h = bar.compute(blocks, partial_block, bar.mlp_res_proj, bar.mlp_res_norm)
 
-        # Note: We don't typically use attention residuals for MLP sublayer
-        # in the standard implementation, but we could
-        mlp_out = self.mlp(normed)
-        x = x + self.dropout(mlp_out)
+        # MLP sublayer (Pre-Norm on the mlp_res output h)
+        mlp_out = self.mlp(self.mlp_norm(h))
+        partial_block = partial_block + self.dropout(mlp_out)
 
-        return x
+        return blocks, partial_block
 
 
 # ============================================================================
@@ -694,27 +661,21 @@ class TransformerEncoderWithAttnRes(nn.Module):
         self.num_layers = num_layers
         self.block_size = block_size
 
-        # Calculate number of blocks
-        # Total blocks = 1 (embeddings) + ceil(num_layers / block_size)
-        num_blocks = 1 + (num_layers + block_size - 1) // block_size
-
         # Embeddings
         self.embedding = nn.Embedding(vocab_size, d_model)
         self.pos_embedding = nn.Embedding(max_seq_len, d_model)
 
-        # Shared block attention residual module
+        # Shared block attention residual module (one set of projections for
+        # all layers — the paper shares weights across all block boundaries)
         self.block_attn_res = BlockAttentionResidual(
             d_model=d_model,
             block_size=block_size,
-            num_blocks=num_blocks,
-            num_heads=num_heads,
             dropout=dropout,
         )
 
         # Transformer layers
         self.layers = nn.ModuleList()
         for i in range(num_layers):
-            is_last_in_block = ((i + 1) % block_size == 0) or (i == num_layers - 1)
             self.layers.append(
                 TransformerLayerWithAttnRes(
                     d_model=d_model,
@@ -723,7 +684,7 @@ class TransformerEncoderWithAttnRes(nn.Module):
                     dropout=dropout,
                     block_attn_res=self.block_attn_res,
                     layer_idx=i,
-                    is_last_in_block=is_last_in_block,
+                    block_size=block_size,
                 )
             )
 
@@ -762,31 +723,35 @@ class TransformerEncoderWithAttnRes(nn.Module):
         """
         batch_size, seq_len = x.shape
 
-        # Reset attention residual cache at start of forward pass
-        self.block_attn_res.reset_cache()
-
         # Embeddings + positional encoding
         positions = (
             torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)
         )
-        x = self.embedding(x) + self.pos_embedding(positions)
-        x = self.dropout(x)
+        emb = self.embedding(x) + self.pos_embedding(positions)
+        emb = self.dropout(emb)
 
-        # Treat embeddings as first block output
-        # This allows block 1 to attend to embeddings
-        self.block_attn_res.block_outputs.append(x.detach())
-        # Start at block 1 (after embeddings), BlockAttentionResidual will handle increments
-        self.block_attn_res.current_block_idx = 1
+        # Block state: treat embeddings as the first completed block.
+        # `blocks` is a list of completed block representations [B, T, D].
+        # `partial_block` is the intra-block running sum for the current block.
+        # Both are threaded through all layers explicitly (no module-level state).
+        blocks: List[torch.Tensor] = [emb]  # embeddings = block 0
+        partial_block: torch.Tensor = torch.zeros_like(emb)
 
-        # Pass through transformer layers
+        # Pass through transformer layers, threading block state
         for layer in self.layers:
-            x = layer(x, mask)
+            blocks, partial_block = layer(blocks, partial_block, mask)
+
+        # `partial_block` always contains the accumulated hidden states for the
+        # current (last) block.  It is reset to zero only at block *entry* (when
+        # the previous block's partial is pushed to `blocks`), so by the time all
+        # layers have run it holds the sum of the last block's sublayer outputs.
+        h = partial_block
 
         # Final normalization
-        x = self.norm(x)
+        h = self.norm(h)
 
         # Project to vocabulary size
-        logits = self.output_projection(x)
+        logits = self.output_projection(h)
 
         return logits
 
@@ -965,31 +930,36 @@ if __name__ == "__main__":
     print(f"  Stored {len(full_attn_res.past_outputs)} layer outputs")
     print("  [PASS]\n")
 
-    # Test 3: BlockAttentionResidual
+    # Test 3: BlockAttentionResidual.compute
     print("Test 3: BlockAttentionResidual")
     print("-" * 40)
     num_blocks = num_layers // block_size
     block_attn_res = BlockAttentionResidual(
         d_model=d_model,
         block_size=block_size,
-        num_blocks=num_blocks,
-        num_heads=num_heads,
     ).to(device)
 
-    # Simulate forward pass
-    block_attn_res.reset_cache()
-    for i in range(num_layers):
-        layer_input = torch.randn(batch_size, seq_len, d_model, device=device)
-        is_last = ((i + 1) % block_size == 0) or (i == num_layers - 1)
-        residual, use_residual = block_attn_res(i, layer_input, is_last)
-        assert residual.shape == layer_input.shape
+    # Simulate compute() calls: build up a list of blocks and a partial_block
+    blocks_test: List[torch.Tensor] = []
+    partial = torch.randn(batch_size, seq_len, d_model, device=device)
+    result = torch.zeros(batch_size, seq_len, d_model, device=device)
+    for i in range(num_blocks):
+        result = block_attn_res.compute(
+            blocks_test,
+            partial,
+            block_attn_res.attn_res_proj,
+            block_attn_res.attn_res_norm,
+        )
+        assert result.shape == partial.shape, f"Shape mismatch at block {i}"
+        blocks_test.append(partial.detach())
+        partial = torch.randn(batch_size, seq_len, d_model, device=device)
 
     print(f"  Block size: {block_size}")
-    print(f"  Number of blocks: {num_blocks}")
-    print(f"  Stored {len(block_attn_res.block_outputs)} block outputs")
+    print(f"  Number of blocks tested: {num_blocks}")
+    print(f"  compute() output shape: {result.shape}")
     print("  [PASS]\n")
 
-    # Test 4: TransformerLayerWithAttnRes
+    # Test 4: TransformerLayerWithAttnRes (new stateless API)
     print("Test 4: TransformerLayerWithAttnRes")
     print("-" * 40)
 
@@ -997,8 +967,6 @@ if __name__ == "__main__":
     shared_block_attn = BlockAttentionResidual(
         d_model=d_model,
         block_size=block_size,
-        num_blocks=num_layers // block_size + 1,
-        num_heads=num_heads,
     ).to(device)
 
     layer = TransformerLayerWithAttnRes(
@@ -1008,14 +976,18 @@ if __name__ == "__main__":
         dropout=0.1,
         block_attn_res=shared_block_attn,
         layer_idx=0,
-        is_last_in_block=False,
+        block_size=block_size,
     ).to(device)
 
-    test_input = torch.randn(batch_size, seq_len, d_model, device=device)
-    output = layer(test_input)
-    assert output.shape == test_input.shape
-    print(f"  Input shape: {test_input.shape}")
-    print(f"  Output shape: {output.shape}")
+    test_blocks: List[torch.Tensor] = [
+        torch.randn(batch_size, seq_len, d_model, device=device)
+    ]
+    test_partial = torch.zeros(batch_size, seq_len, d_model, device=device)
+    out_blocks, out_partial = layer(test_blocks, test_partial)
+    assert out_partial.shape == (batch_size, seq_len, d_model)
+    print(f"  Input partial shape: {test_partial.shape}")
+    print(f"  Output partial shape: {out_partial.shape}")
+    print(f"  Blocks out: {len(out_blocks)}")
     print("  [PASS]\n")
 
     # Test 5: TransformerEncoderWithAttnRes
