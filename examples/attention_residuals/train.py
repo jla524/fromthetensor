@@ -1124,31 +1124,34 @@ def compare_models(
     # Previous versions used different dropout/weight_decay for each model,
     # which confounded the comparison.  The paper keeps all hyperparameters
     # equal to isolate the architectural effect.
+    #
+    # Standard model is trained first to establish the baseline without any
+    # prior memory pressure from the heavier block-residual model.
     print("\n" + "-" * 70)
-    print("Training Attention Residual Model...")
-    print("  (Same hyperparameters as Standard for a fair comparison)")
-    print("-" * 70)
-    attnres_config = TrainingConfig(
-        model="attnres",
-        **base_config,
-    )
-    attnres_results = train_model(attnres_config, verbose=True)
-
-    # Free GPU memory before training the second model.
-    # The attnres model object goes out of scope here; explicitly collect to
-    # ensure CUDA memory is returned before the standard model is allocated.
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    # Train Standard model with identical hyperparameters
-    print("\n" + "-" * 70)
-    print("Training Standard Transformer Model...")
+    print("Training Standard Transformer Model (baseline)...")
+    print("  (Same hyperparameters as AttnRes for a fair comparison)")
     print("-" * 70)
     std_config = TrainingConfig(
         model="standard",
         **base_config,
     )
     std_results = train_model(std_config, verbose=True)
+
+    # Free GPU memory before training the second model.
+    # The standard model object goes out of scope here; explicitly collect to
+    # ensure CUDA memory is returned before the AttnRes model is allocated.
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    # Train Attention Residual model with identical hyperparameters
+    print("\n" + "-" * 70)
+    print("Training Attention Residual Model...")
+    print("-" * 70)
+    attnres_config = TrainingConfig(
+        model="attnres",
+        **base_config,
+    )
+    attnres_results = train_model(attnres_config, verbose=True)
 
     # Compute efficiency metrics
     attnres_time = attnres_results["total_time_seconds"]

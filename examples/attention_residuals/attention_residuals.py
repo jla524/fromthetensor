@@ -533,8 +533,8 @@ class TransformerLayerWithAttnRes(nn.Module):
         self.attn_norm = get_norm_layer(d_model)
         self.mlp_norm = get_norm_layer(d_model)
 
-        # Self-attention
-        self.self_attn = MultiHeadAttention(d_model, num_heads, dropout)
+        # Self-attention (causal mask for autoregressive language modeling)
+        self.self_attn = MultiHeadAttention(d_model, num_heads, dropout, causal=True)
 
         # Feed-forward
         self.mlp = FeedForward(d_model, d_ff, dropout)
@@ -864,7 +864,7 @@ class StandardTransformerLayer(nn.Module):
         super().__init__()
 
         self.norm1 = get_norm_layer(d_model)
-        self.self_attn = MultiHeadAttention(d_model, num_heads, dropout)
+        self.self_attn = MultiHeadAttention(d_model, num_heads, dropout, causal=True)
 
         self.norm2 = get_norm_layer(d_model)
         self.mlp = FeedForward(d_model, d_ff, dropout)
