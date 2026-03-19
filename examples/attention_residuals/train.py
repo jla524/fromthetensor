@@ -94,6 +94,7 @@ class TrainingConfig:
     warmup_steps: int = 500  # ~5% of total optimizer steps (20 × 500 = 10 000)
     max_grad_norm: float = 1.0
     device: str = "auto"
+    bf16: bool = False  # Use bfloat16 mixed precision (requires CUDA Ampere+ or MPS)
     seed: int = 42
     save_dir: str = "./checkpoints"
     log_interval: int = 50
@@ -673,16 +674,23 @@ def train_epoch(
         accum_loss = 0.0
         last_x = None
 
+        autocast_ctx = (
+            torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+            if config.bf16
+            else torch.autocast(device_type=device.type, enabled=False)
+        )
+
         for micro_step in range(accum):
             x, y = dataset.get_batch(config.batch_size, device)
             last_x = x
 
-            logits = model(x)
-            micro_loss = F.cross_entropy(
-                logits.reshape(-1, config.vocab_size),
-                y.reshape(-1),
-                ignore_index=-100,
-            )
+            with autocast_ctx:
+                logits = model(x)
+                micro_loss = F.cross_entropy(
+                    logits.reshape(-1, config.vocab_size),
+                    y.reshape(-1),
+                    ignore_index=-100,
+                )
             # Scale loss so gradients are averaged across micro-batches
             (micro_loss / accum).backward()
             accum_loss += micro_loss.item() / accum
@@ -822,15 +830,22 @@ def evaluate_model(
     total_loss = 0.0
     total_batches = 0
 
+    autocast_ctx = (
+        torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+        if config.bf16
+        else torch.autocast(device_type=device.type, enabled=False)
+    )
+
     with torch.no_grad():
         for _ in range(num_batches):
             x, y = dataset.get_batch(config.batch_size, device)
-            logits = model(x)
-            loss = F.cross_entropy(
-                logits.reshape(-1, config.vocab_size),
-                y.reshape(-1),
-                ignore_index=-100,
-            )
+            with autocast_ctx:
+                logits = model(x)
+                loss = F.cross_entropy(
+                    logits.reshape(-1, config.vocab_size),
+                    y.reshape(-1),
+                    ignore_index=-100,
+                )
             total_loss += loss.item()
             total_batches += 1
 
@@ -866,7 +881,8 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
     # Get device
     device = get_device(config.device)
     if verbose:
-        print(f"Using device: {device}")
+        dtype_str = "bfloat16 (mixed)" if config.bf16 else "float32"
+        print(f"Using device: {device}  |  dtype: {dtype_str}")
         print(f"Model type: {config.model}")
         print(
             f"Config: {config.hidden_dim}d, {config.num_layers}L, {config.num_heads}H, "
@@ -1072,6 +1088,7 @@ def compare_models(
     lr: float = 1e-4,
     vocab_size: int = 10000,
     device: str = "auto",
+    bf16: bool = False,
     save_plots: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -1117,6 +1134,7 @@ def compare_models(
         "epochs": epochs,
         "lr": lr,
         "device": device,
+        "bf16": bf16,
         "dropout": 0.1,  # Base dropout rate
     }
 
@@ -2152,6 +2170,11 @@ Examples:
         help="Device to use (default: auto)",
     )
     parser.add_argument(
+        "--bf16",
+        action="store_true",
+        help="Enable bfloat16 mixed precision via torch.autocast (requires CUDA Ampere+ or MPS)",
+    )
+    parser.add_argument(
         "--seed", type=int, default=42, help="Random seed (default: 42)"
     )
 
@@ -2225,6 +2248,7 @@ def main():
         "warmup_steps": args.warmup_steps,
         "max_grad_norm": args.max_grad_norm,
         "device": args.device,
+        "bf16": args.bf16,
         "seed": args.seed,
         "save_dir": args.save_dir,
         "log_interval": args.log_interval,
@@ -2245,6 +2269,7 @@ def main():
             lr=args.lr,
             vocab_size=args.vocab_size,
             device=args.device,
+            bf16=args.bf16,
         )
     elif args.scaling:
         # Run scaling law experiments
