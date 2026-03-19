@@ -95,6 +95,9 @@ class TrainingConfig:
     max_grad_norm: float = 1.0
     device: str = "auto"
     bf16: bool = False  # Use bfloat16 mixed precision (requires CUDA Ampere+ or MPS)
+    early_stop_patience: int = (
+        0  # Stop if val PPL doesn't improve for N epochs (0 = disabled)
+    )
     seed: int = 42
     save_dir: str = "./checkpoints"
     log_interval: int = 50
@@ -945,9 +948,13 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
     if verbose:
         print(f"Estimated FLOPs per step: {flops_per_step:.2e}")
 
-    # Training loop — runs for exactly config.epochs, no early stopping.
-    # Equal compute budgets are required for valid IsoFLOP comparisons.
+    # Training loop — runs for config.epochs, with optional early stopping on
+    # val PPL.  Early stopping is disabled by default (patience=0) so IsoFLOP
+    # comparisons use equal compute budgets; set early_stop_patience>0 for
+    # quick convergence-focused runs.
     start_time = time.time()
+    best_val_ppl = float("inf")
+    patience_counter = 0
 
     for epoch in range(1, config.epochs + 1):
         epoch_train_history: List[Dict] = []
@@ -993,6 +1000,21 @@ def train_model(config: TrainingConfig, verbose: bool = True) -> Dict[str, Any]:
             f"Epoch {epoch} Validation - Loss: {val_metrics['loss']:.4f}, "
             f"PPL: {val_metrics['perplexity']:.2f}\n"
         )
+
+        # Early stopping on val PPL
+        if config.early_stop_patience > 0:
+            if val_metrics["perplexity"] < best_val_ppl:
+                best_val_ppl = val_metrics["perplexity"]
+                patience_counter = 0
+            else:
+                patience_counter += 1
+                if patience_counter >= config.early_stop_patience:
+                    print(
+                        f"Early stopping: val PPL has not improved for "
+                        f"{config.early_stop_patience} epochs "
+                        f"(best={best_val_ppl:.2f}). Stopping at epoch {epoch}."
+                    )
+                    break
 
     total_time = time.time() - start_time
 
@@ -1084,11 +1106,12 @@ def compare_models(
     block_size: int = 4,
     seq_len: int = 512,
     batch_size: int = 64,
-    epochs: int = 20,
+    epochs: int = 8,
     lr: float = 1e-4,
     vocab_size: int = 10000,
     device: str = "auto",
     bf16: bool = False,
+    early_stop_patience: int = 3,
     save_plots: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -1135,6 +1158,7 @@ def compare_models(
         "lr": lr,
         "device": device,
         "bf16": bf16,
+        "early_stop_patience": early_stop_patience,
         "dropout": 0.1,  # Base dropout rate
     }
 
@@ -2175,6 +2199,12 @@ Examples:
         help="Enable bfloat16 mixed precision via torch.autocast (requires CUDA Ampere+ or MPS)",
     )
     parser.add_argument(
+        "--early_stop_patience",
+        type=int,
+        default=0,
+        help="Stop training if val PPL doesn't improve for N epochs; 0 disables (default: 0)",
+    )
+    parser.add_argument(
         "--seed", type=int, default=42, help="Random seed (default: 42)"
     )
 
@@ -2249,6 +2279,7 @@ def main():
         "max_grad_norm": args.max_grad_norm,
         "device": args.device,
         "bf16": args.bf16,
+        "early_stop_patience": args.early_stop_patience,
         "seed": args.seed,
         "save_dir": args.save_dir,
         "log_interval": args.log_interval,
@@ -2270,6 +2301,7 @@ def main():
             vocab_size=args.vocab_size,
             device=args.device,
             bf16=args.bf16,
+            early_stop_patience=args.early_stop_patience,
         )
     elif args.scaling:
         # Run scaling law experiments
