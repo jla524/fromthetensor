@@ -2161,7 +2161,10 @@ Examples:
         help="Gradient accumulation steps (default: 2, effective batch = batch_size × grad_accum_steps)",
     )
     parser.add_argument(
-        "--epochs", type=int, default=20, help="Number of epochs (default: 20)"
+        "--epochs",
+        type=int,
+        default=-1,
+        help="Number of epochs (default: 20 for single model, 8 for --compare)",
     )
     parser.add_argument(
         "--steps_per_epoch",
@@ -2259,6 +2262,13 @@ def main():
     """Main entry point."""
     args = parse_args()
 
+    # Resolve epoch sentinel: -1 means "use mode-specific default"
+    # --compare defaults to 8, single-model to 20
+    if args.epochs == -1:
+        epochs = 8 if args.compare else 20
+    else:
+        epochs = args.epochs
+
     # Create config from args
     config_dict = {
         "model": args.model,
@@ -2271,7 +2281,7 @@ def main():
         "seq_len": args.seq_len,
         "batch_size": args.batch_size,
         "grad_accum_steps": args.grad_accum_steps,
-        "epochs": args.epochs,
+        "epochs": epochs,
         "steps_per_epoch": args.steps_per_epoch,
         "lr": args.lr,
         "weight_decay": args.weight_decay,
@@ -2296,7 +2306,7 @@ def main():
             block_size=args.block_size,
             seq_len=args.seq_len,
             batch_size=args.batch_size,
-            epochs=args.epochs,
+            epochs=epochs,
             lr=args.lr,
             vocab_size=args.vocab_size,
             device=args.device,
