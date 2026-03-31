@@ -80,7 +80,16 @@ it's hard to understand [software 2.0][1] from first principles.
 >
 > -- [@yoobinray][4]
 
-See [ideas.md][5] for some ideas.
+#### New: Optimizations for Language Models (Inference)
+
+- GPU Programming & CUDA Kernels (`gpu_intro.py`)
+- Fast Attention + KV Cache ([[FlashAttention](https://arxiv.org/abs/2205.14135)])
+- torch.compile + AMP (`compile_amp.py`)
+- LoRA for Instruction Tuning (tiny Alpaca subset) ([[LoRA](https://arxiv.org/abs/2106.09685)])
+
+See `examples/optimizations/`.
+
+See [ideas.md][5] for more ideas.
 
 [0]: https://github.com/geohot/fromthetransistor
 [1]: https://karpathy.medium.com/software-2-0-a64152b37c35

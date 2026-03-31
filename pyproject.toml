@@ -18,4 +18,6 @@ dependencies = [
     "tqdm>=4.67.1",
     "transformers>=4.56.1",
     "unidecode>=1.4.0",
+    "peft>=0.12.0",
+    "bitsandbytes>=0.44.0",
 ]
