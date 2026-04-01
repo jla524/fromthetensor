@@ -74,20 +74,18 @@ it's hard to understand [software 2.0][1] from first principles.
 [[code](https://github.com/jla524/fromthetensor/blob/main/examples/stable_diffusion.ipynb)]
 [[paper](https://arxiv.org/abs/2112.10752)]
 
-### Beyond the Tensor
-
-> when ppl ask me how to get better at being a ML engineer i tell them to stop learning about ML and start learning about systems
->
-> -- [@yoobinray][4]
-
-#### New: Optimizations for Language Models (Inference)
+#### Section 6: Optimizations for Language Models (Inference) -- 1 week
 
 - GPU Programming & CUDA Kernels (`gpu_intro.py`)
 - Fast Attention + KV Cache ([[FlashAttention](https://arxiv.org/abs/2205.14135)])
 - torch.compile + AMP (`compile_amp.py`)
 - LoRA for Instruction Tuning (tiny Alpaca subset) ([[LoRA](https://arxiv.org/abs/2106.09685)])
 
-See `examples/optimizations/`.
+### Beyond the Tensor
+
+> when ppl ask me how to get better at being a ML engineer i tell them to stop learning about ML and start learning about systems
+>
+> -- [@yoobinray][4]
 
 See [ideas.md][5] for more ideas.
 
